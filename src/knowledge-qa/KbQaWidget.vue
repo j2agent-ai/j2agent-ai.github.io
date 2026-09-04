@@ -112,6 +112,8 @@ type PendingAskAnswer = {
   userMessageIndex: number
 }
 const pendingAskAnswer = ref<PendingAskAnswer | null>(null)
+/** 当前回合仍在输出时点击「反馈给 AI」排队的诊断信息 */
+const pendingDiagramFeedback = ref<KbMessage | null>(null)
 
 const configReady = computed(
   () =>
@@ -375,6 +377,7 @@ watch(isBusy, (busy, wasBusy) => {
   }
   flushActivateMarkdownBlocks()
   void flushPendingAskQuestionAnswer()
+  void flushPendingDiagramFeedback()
 })
 
 /** 内容变化时仅处理滚动，不触发全量 markdown 重渲染 */
@@ -745,6 +748,43 @@ async function handleSend() {
   inputEl.value?.focus()
 }
 
+async function sendDiagramFeedback(diagnostic: string) {
+  const content = `请帮我修复以下 Markdown 图表渲染错误：\n\n${diagnostic.trim()}`
+  if (!diagnostic.trim()) {
+    return
+  }
+  stickToBottom.value = true
+  if (isBusy.value || sending.value || connecting.value) {
+    const userMsg: KbMessage = {
+      index: messages.value.length,
+      role: 'user',
+      content
+    }
+    messages.value.push(userMsg)
+    pendingDiagramFeedback.value = userMsg
+    await nextTick()
+    scrollMessagesToBottom('smooth')
+    return
+  }
+  input.value = content
+  await handleSend()
+}
+
+async function flushPendingDiagramFeedback() {
+  const userMsg = pendingDiagramFeedback.value
+  if (!userMsg || isBusy.value || sending.value || connecting.value) {
+    return
+  }
+  pendingDiagramFeedback.value = null
+  const started = await startTurn(session, userMsg.content, language, {
+    existingUserMessage: userMsg
+  })
+  if (started) {
+    await nextTick()
+    scrollMessagesToBottom('smooth')
+  }
+}
+
 async function openAndAsk(question: string) {
   if (!open.value) {
     toggleOpen()
@@ -824,6 +864,10 @@ function handleBubbleClick(event: MouseEvent) {
     const block = copyBtn.closest('.md-code-block')
     const pre = block?.querySelector('pre')
     const code = pre?.querySelector('code')?.textContent ?? pre?.textContent ?? ''
+    if (copyBtn.classList.contains('md-diagram-error-copy')) {
+      void sendDiagramFeedback(code)
+      return
+    }
     void copyMessage(code, -1)
     return
   }

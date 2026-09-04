@@ -560,8 +560,10 @@ const renderDiagnosticCopyButton = (content: string) => [
   '<div class="md-code-block-foot">',
   `<button type="button" class="md-code-copy md-diagram-error-copy" aria-label="${escapeHtml(
     mt('markdownRenderer.diagramError.copyAllDiagnostics', 'Copy diagnostics')
-  )}" title="${escapeHtml(mt('markdownRenderer.copyAll', 'Copy all'))}">`,
-  MD_CODE_COPY_ICON,
+  )}" title="${escapeHtml(
+    mt('markdownRenderer.diagramError.copyAllDiagnostics', 'Copy diagnostics')
+  )}">`,
+  '<svg class="md-code-copy-icon md-diagram-feedback-icon" viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 12h15M13 6l6 6-6 6"/></svg>',
   `<span>${escapeHtml(
     mt('markdownRenderer.diagramError.copyAllDiagnostics', 'Copy diagnostics')
   )}</span>`,

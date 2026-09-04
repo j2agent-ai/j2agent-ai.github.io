@@ -5,7 +5,7 @@
 const messages: Record<string, string> = {
   'markdownRenderer.copyCode': '复制代码',
   'markdownRenderer.copy': '复制',
-  'markdownRenderer.diagramError.copyAllDiagnostics': '复制诊断信息',
+  'markdownRenderer.diagramError.copyAllDiagnostics': '反馈给 AI',
   'markdownRenderer.copyAll': '全部复制',
   'markdownRenderer.diagramError.viewDetails': '查看错误详情',
   'mdViewer.loading': '加载中…',
