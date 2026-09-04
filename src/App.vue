@@ -18,7 +18,7 @@ const copy = {
 	heroEyebrow: 'J2AGENT AI · INTELLIGENT WORK PLATFORM',
 	heroTitle: ['把大模型的能力，', '接入真实工作。'],
 	heroBody: 'J2Agent 将 Agent、工具、企业知识与可观测运行时连接起来，让 AI 从“会回答”走向“能完成”。',
-	viewScreens: '查看产品界面',
+	viewScreens: '查看技术能力',
 	technologyEyebrow: 'ENGINEERED FOR REAL WORK',
 	technologyTitle: ['不是简单接入模型，', '而是一套完整系统。'],
 	technologyBody: '从检索质量到任务可靠性，每一层都为真实业务中的可控、可追溯与可扩展而设计。',
@@ -30,7 +30,11 @@ const copy = {
 	architectureBody: '统一事件信封串起 THINKING、CALLING_TOOL、STREAMING_TEXT 到 COMPLETED 的完整状态迁移；来源、工具调用、Token 用量与会话记录，都可以被审计和复盘。',
 	readArchitecture: '阅读架构文档',
 	runtime: '正在执行任务',
-	intent: '意图召回',
+	intent: '意图识别',
+	subAgent: '调用子智能体「火车票助手」',
+	tool: '调用工具',
+	thinking: '思考中',
+	output: '输出中',
 	knowledge: '调用知识库',
 	answer: '流式生成答案',
 	done: '完成',
@@ -67,6 +71,51 @@ const previewImage = ref('')
 const diagramPreviewSvgs = ref([])
 const diagramPreviewIndex = ref(0)
 const mobileDocsNavOpen = ref(false)
+const kbQaWidgetRef = ref()
+const runtimeDemo = {
+	input: '查找武汉到深圳的最优方案',
+	title: '火车票方案已生成',
+	body: '已从车次、票价、历时与余票等维度完成分析。'
+}
+const runtimeMetrics = [
+	{ icon: '🚄', label: '推荐车次', value: 'G1016' },
+	{ icon: '¥', label: '二等座', value: '¥538' },
+	{ icon: '◷', label: '运行历时', value: '4时12分' },
+	{ icon: '✓', label: '余票状态', value: '充足' }
+]
+const runtimeResponseVisible = ref(false)
+const runtimeSending = ref(false)
+const runtimeStep = ref(-1)
+let runtimeResponseTimer
+let runtimeProgressTimer
+const runtimeSteps = [copy.intent, copy.subAgent, copy.tool, copy.thinking, copy.output]
+const runtimeStateLabel = computed(() => {
+	if (runtimeResponseVisible.value) return '任务已完成'
+	if (runtimeStep.value < 0) return '等待发送'
+	return `正在${runtimeSteps[runtimeStep.value]}`
+})
+const sendRuntimeDemo = () => {
+	if (runtimeSending.value) return
+	runtimeSending.value = true
+	runtimeStep.value = 0
+	runtimeResponseVisible.value = false
+	window.clearTimeout(runtimeProgressTimer)
+	window.clearTimeout(runtimeResponseTimer)
+	const advance = () => {
+		if (runtimeStep.value < runtimeSteps.length - 1) {
+			runtimeProgressTimer = window.setTimeout(() => {
+				runtimeStep.value += 1
+				advance()
+			}, 700)
+			return
+		}
+		runtimeResponseTimer = window.setTimeout(() => {
+			runtimeSending.value = false
+		runtimeResponseVisible.value = true
+		}, 650)
+	}
+	advance()
+}
 
 const rawBase = 'https://j2agent-ai.jerryt92.top/j2agent-docs/'
 const fallbackDocs = [
@@ -291,12 +340,22 @@ onBeforeUnmount(() => {
 	window.removeEventListener('keydown', handleGlobalKeydown)
 	documentStore.cancel()
 	portalDiagramRenderer.cancel()
+	window.clearTimeout(runtimeProgressTimer)
+	window.clearTimeout(runtimeResponseTimer)
 })
 const notify = (message) => {
 	toast.value = message
 	window.setTimeout(() => (toast.value = ''), 2400)
 }
 const jump = (id) => document.getElementById(id)?.scrollIntoView({behavior: 'smooth'})
+const askFeatureQuestion = () => {
+	const questions = {
+		rag: 'J2Agent 的 RAG 融合检索是如何实现的？',
+		agent: 'J2Agent 如何编排子智能体并完成工具调用？',
+		runtime: 'J2Agent 如何确保智能体状态可追踪，不中断？'
+	}
+	void kbQaWidgetRef.value?.openAndAsk(questions[activeFeature.value])
+}
 const openImagePreview = (event) => {
 	const image = event.target.closest?.('.screen-card img')
 	if (image) previewImage.value = image.currentSrc || image.src
@@ -350,7 +409,7 @@ const features = {
 					<p>{{ copy.heroBody }}</p>
 					<div class="hero-actions"><a class="glass-button blue large" href="https://j2agent.jerryt92.top/" target="_blank"
 					                             rel="noreferrer">{{ copy.experience }} <b>↗</b></a>
-						<button class="link-button" @click="jump('product')">{{ copy.viewScreens }} <b>↓</b></button>
+						<button class="link-button" @click="jump('technology')">{{ copy.viewScreens }} <b>↓</b></button>
 					</div>
 					<div class="proof-row"><span>SPRING AI</span><span>WEBSOCKET</span><span>MILVUS</span><span>REDIS</span></div>
 				</div>
@@ -359,17 +418,34 @@ const features = {
 					<div class="orb orb-orange"></div>
 					<div class="hero-glass glass-panel">
 						<div class="hero-glass-head"><span class="live-dot"></span> AGENT RUNTIME <em>LIVE</em></div>
-						<div class="runtime-state">
+						<div class="runtime-state" :class="{ 'is-sending': runtimeSending }">
 							<div class="state-ring">✦</div>
-							<div><strong>{{ copy.runtime }}</strong><small>universal_assistant · turn_2048</small></div>
-							<span class="state-time">00:12</span></div>
+							<div><strong>{{ runtimeStateLabel }}</strong><small>universal_assistant · turn_2048</small></div>
+							<span class="state-time">{{ runtimeSending ? '…' : '00:12' }}</span></div>
 						<div class="trace">
-							<div class="trace-item done"><i>✓</i><span>{{ copy.intent }}</span><b>{{ copy.done }}</b></div>
-							<div class="trace-item done"><i>✓</i><span>{{ copy.knowledge }}</span><b>48 docs</b></div>
-							<div class="trace-item active"><i>↗</i><span>{{ copy.answer }}</span><b>{{ copy.active }}</b></div>
+							<template v-for="(step, index) in runtimeSteps" :key="step">
+								<div v-if="index <= runtimeStep" class="trace-item"
+								     :class="{ done: runtimeStep > index || (index === runtimeSteps.length - 1 && runtimeResponseVisible), active: runtimeStep === index && !runtimeResponseVisible }">
+									<i>{{ runtimeStep > index || (index === runtimeSteps.length - 1 && runtimeResponseVisible) ? '✓' : '↗' }}</i>
+									<span>{{ step }}</span>
+									<b>{{ runtimeStep > index || (index === runtimeSteps.length - 1 && runtimeResponseVisible) ? copy.done : copy.active }}</b>
+								</div>
+							</template>
 						</div>
-						<div class="runtime-input">{{ copy.input }}
-							<button>↑</button>
+						<div v-if="runtimeResponseVisible" class="runtime-response">
+							<div class="rail-result">
+								<div class="rail-result-head"><strong>{{ runtimeDemo.title }}</strong><span>{{ runtimeDemo.body }}</span></div>
+								<div class="rail-metrics">
+									<div v-for="metric in runtimeMetrics" :key="metric.label" class="rail-metric">
+										<i>{{ metric.icon }}</i><span>{{ metric.label }}</span><b>{{ metric.value }}</b>
+									</div>
+								</div>
+							</div>
+						</div>
+						<div class="runtime-input" :class="{ 'is-sending': runtimeSending }">
+							<span>{{ runtimeDemo.input }}</span>
+							<span v-if="runtimeStep < 0" class="runtime-hint">点击发送查看完整流程 <b>↓</b></span>
+							<button type="button" aria-label="发送预设问题" :disabled="runtimeSending" @click="sendRuntimeDemo">↑</button>
 						</div>
 					</div>
 				</div>
@@ -392,7 +468,13 @@ const features = {
 					</div>
 					<div class="tech-detail glass-panel">
 						<div class="detail-kicker">{{ features[activeFeature].label }}</div>
-						<h3>{{ features[activeFeature].title }}</h3>
+						<div class="tech-detail-title">
+							<h3>{{ features[activeFeature].title }}</h3>
+							<button type="button" class="tech-ask-button" @click="askFeatureQuestion">
+								<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 13.8 9l5.7 1.8-5.7 1.8-1.8 5.9-1.8-5.9-5.7-1.8L10.2 9 12 3.5Z"/><path d="m19 15 .7 2.3L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.7L19 15Z"/></svg>
+								<span>询问 AI 了解具体实现</span><b>↗</b>
+							</button>
+						</div>
 						<p v-if="activeFeature === 'rag'">以 <a class="tech-link milvus-link" href="https://milvus.io" target="_blank" rel="noopener noreferrer"><img src="/milvus-logo.svg" alt="Milvus"/></a> 为向量检索底座，承载企业知识的高效存储与近似最近邻搜索；结合 BM25 稀疏检索与融合排序，在检索速度、规模和召回质量之间取得平衡。</p>
 						<p v-else>{{ features[activeFeature].body }}</p>
 						<div class="chip-row"><span v-for="chip in features[activeFeature].chips" :key="chip">{{ chip }}</span></div>
@@ -507,7 +589,7 @@ const features = {
 		</section>
 		<footer><span class="footer-brand"><img src="/logo-b.svg" alt="J2Agent AI"/><span>{{ copy.footer }}</span></span><span class="footer-meta"><span>© 2026 jerryt92</span><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">滇ICP备2026015130号</a></span>
 		</footer>
-		<KbQaWidget @open-doc="openDocFromAi"/>
+		<KbQaWidget ref="kbQaWidgetRef" @open-doc="openDocFromAi"/>
 		<transition name="toast">
 			<div v-if="toast" class="toast">{{ toast }}</div>
 		</transition>

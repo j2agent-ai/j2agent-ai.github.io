@@ -318,6 +318,339 @@ html,body{min-width:320px;overflow-x:hidden}
 	object-position: center;
 }
 
+.tech-ask-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 0;
+	padding: 8px 12px;
+	border: 1px solid #c8daf3;
+	border-radius: 999px;
+	background: rgba(255,255,255,.68);
+	color: #4d82df;
+	font: 600 11px inherit;
+	white-space: nowrap;
+	cursor: pointer;
+	transition: .2s;
+}
+.tech-ask-button svg {
+	width: 16px;
+	height: 16px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.8;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+.tech-ask-button b { margin-left: 2px; font-size: 14px; font-weight: 500; }
+.tech-ask-button:hover { transform: translateY(-2px); background: #f4f8ff; box-shadow: 0 7px 16px #5689d633; }
+.tech-detail-title { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.tech-detail-title h3 { margin-bottom: 10px; }
+.tech-detail-title .tech-ask-button { flex: none; }
+@media (max-width: 600px) {
+	.tech-detail-title { display: block; }
+	.tech-detail-title .tech-ask-button { margin-top: 3px; }
+}
+
+/* 窄屏首屏演示改为内容流，保证流程与结果完整可见 */
+@media (max-width: 600px) {
+	.hero-art {
+		height: auto !important;
+		min-height: 620px !important;
+		padding: 18px 0 24px !important;
+	}
+	.hero-glass {
+		position: relative !important;
+		inset: auto !important;
+		width: 100% !important;
+		height: auto !important;
+		min-height: 578px !important;
+		transform: none !important;
+		overflow: visible !important;
+		padding: 24px 20px 26px !important;
+		margin: 0 !important;
+	}
+	.hero-glass .runtime-response {
+		position: static !important;
+		top: auto !important;
+		transform: none !important;
+		margin: 16px 0 0 !important;
+	}
+	.hero-glass .runtime-input {
+		position: relative !important;
+		left: auto !important;
+		right: auto !important;
+		top: auto !important;
+		bottom: auto !important;
+		width: 100% !important;
+		margin: 24px 0 0 !important;
+	}
+	.hero-glass .trace {
+		position: static !important;
+		top: auto !important;
+		margin: 0 !important;
+		padding: 8px 0 !important;
+	}
+	.runtime-hint { top: -40px; }
+}
+
+/* 统一响应式策略：演示卡片始终由内容撑开，不使用固定高度或绝对输入栏 */
+.hero-art {
+	height: auto !important;
+	min-height: 0 !important;
+}
+.hero-glass {
+	position: relative !important;
+	inset: auto !important;
+	height: auto !important;
+	min-height: 0 !important;
+	width: 100% !important;
+	transform: rotate(1.8deg);
+	overflow: visible !important;
+}
+.hero-glass .trace {
+	position: static !important;
+	top: auto !important;
+	margin: 0 !important;
+}
+.hero-glass .runtime-response {
+	position: static !important;
+	top: auto !important;
+	transform: none !important;
+	margin: 14px 0 0 !important;
+}
+.hero-glass .runtime-input {
+	position: relative !important;
+	left: auto !important;
+	right: auto !important;
+	top: auto !important;
+	bottom: auto !important;
+	width: 100% !important;
+	margin: 18px 0 0 !important;
+}
+@media (max-width: 500px) {
+	.hero-glass { transform: none; padding: 18px; }
+	.rail-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* 首屏运行演示：发送反馈与结果图文 */
+.hero-glass {
+	padding: 20px 26px 18px;
+}
+.hero-art {
+	height: 520px;
+}
+.hero-glass {
+	inset: 12px 0 0 13px;
+}
+.hero-glass {
+	overflow: hidden;
+}
+.hero-glass .runtime-input {
+	position: absolute;
+	left: 26px;
+	right: 26px;
+	bottom: 18px;
+	margin-top: 0;
+}
+.hero-glass .runtime-response {
+	position: relative;
+	margin-bottom: 0;
+	top: -30px;
+}
+.trace-item {
+	padding: 7px 0;
+}
+.hero-glass .trace {
+	position: relative;
+	top: 0;
+	margin-bottom: 0;
+}
+.hero-glass-head { border-bottom: 0; padding-bottom: 8px; }
+.hero-glass .runtime-state { margin: 16px 0 12px; }
+.hero-glass .trace { border-top: 0; border-bottom: 0; padding: 0; }
+.hero-glass .runtime-response { top: 0; margin-top: 10px; }
+.runtime-state.is-sending .state-ring {
+	animation: runtime-pulse .9s ease-in-out infinite alternate;
+}
+.runtime-state.is-sending strong {
+	color: #4d84e8;
+}
+.runtime-input {
+	position: relative;
+	margin-top: 20px;
+	padding: 11px 10px 11px 15px;
+}
+.runtime-input span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.runtime-hint {
+	position: absolute;
+	right: 0;
+	top: -48px;
+	padding: 9px 15px;
+	border-radius: 9px;
+	background: #5186e6;
+	color: #fff;
+	font-size: 14px;
+	font-weight: 700;
+	line-height: 1.2;
+	box-shadow: 0 7px 18px #5186e666;
+	animation: hint-float 1.5s ease-in-out infinite;
+	 z-index: 2;
+}
+.runtime-hint::after {
+	content: '';
+	position: absolute;
+	right: 10px;
+	bottom: -4px;
+	width: 8px;
+	height: 8px;
+	background: #5186e6;
+	transform: rotate(45deg);
+	 z-index: -1;
+}
+.runtime-hint b {
+	margin-left: 6px;
+	font-size: 18px;
+}
+.runtime-input button {
+	flex: 0 0 28px;
+	cursor: pointer;
+	transition: .2s;
+}
+.runtime-input button:hover:not(:disabled) {
+	transform: translateY(-2px) scale(1.04);
+	box-shadow: 0 5px 12px #5086e855;
+}
+.runtime-input button:disabled {
+	cursor: wait;
+	opacity: .65;
+}
+.runtime-input.is-sending button {
+	animation: send-bounce .76s ease-in-out infinite;
+}
+.runtime-response {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-top: 13px;
+	padding: 8px;
+	border: 1px solid #dce8f8;
+	border-radius: 10px;
+	background: rgba(255,255,255,.72);
+	animation: response-in .35s ease-out both;
+}
+.runtime-response img {
+	width: 58px;
+	height: 39px;
+	flex: 0 0 58px;
+	object-fit: cover;
+	object-position: top;
+	border-radius: 6px;
+}
+.rail-result {
+	width: 100%;
+}
+.rail-result-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 10px;
+}
+.rail-result-head strong {
+	font-size: 11px;
+	white-space: nowrap;
+}
+.rail-result-head span {
+	margin-top: 0;
+	text-align: right;
+	white-space: nowrap;
+}
+.rail-metrics {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 6px;
+	margin-top: 8px;
+}
+.rail-metric {
+	min-width: 0;
+	padding: 4px 4px;
+	border: 1px solid #e0eaf7;
+	border-radius: 7px;
+	background: #f8fbff;
+	text-align: center;
+}
+.rail-metric i,
+.rail-metric span,
+.rail-metric b {
+	display: block;
+}
+.rail-metric i {
+	font-style: normal;
+	font-size: 13px;
+	line-height: 1.1;
+}
+.rail-metric span {
+	margin-top: 3px;
+	font-size: 8px;
+	color: #8192aa;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.rail-metric b {
+	margin-top: 2px;
+	color: #4c6f9f;
+	font: 600 9px 'DM Mono', monospace;
+	white-space: nowrap;
+}
+.runtime-response strong,
+.runtime-response span {
+	display: block;
+}
+.runtime-response strong {
+	color: #405774;
+	font-size: 11px;
+}
+.runtime-response span {
+	margin-top: 3px;
+	color: #8192aa;
+	font-size: 9px;
+	line-height: 1.45;
+}
+.trace-item.is-complete i {
+	background: #dcf3e4;
+	color: #45ae6b;
+}
+.trace-item.is-complete b {
+	color: #45ae6b;
+}
+@keyframes response-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes runtime-pulse { from { box-shadow: 0 0 0 8px #e2ecfb; } to { box-shadow: 0 0 0 13px #e2ecfb88; } }
+@keyframes send-bounce { 50% { transform: translateY(-2px); } }
+@keyframes hint-float { 50% { transform: translateY(-3px); box-shadow: 0 8px 16px #5186e655; } }
+@media(max-width:500px) {
+	.hero-art { height: 420px; }
+	.hero-glass { inset: 10px 0 0; padding: 16px 18px 20px; }
+	.hero-glass .runtime-input { left: 18px; right: 18px; bottom: 16px; }
+	.hero-glass .runtime-response { top: -24px; }
+	.runtime-hint { top: -40px; padding: 8px 12px; font-size: 12px; }
+	.runtime-response { margin-top: 10px; }
+	.runtime-response img { width: 50px; height: 34px; flex-basis: 50px; }
+	.trace-item { padding: 5px 0; font-size: 11px; }
+	.hero-glass .trace { top: 0; margin-bottom: 0; }
+	.hero-glass .runtime-state { margin: 12px 0 8px; }
+	.hero-glass .runtime-response { margin-top: 8px; }
+	.rail-result-head { display: block; }
+	.rail-result-head span { display: block; margin-top: 3px; text-align: left; }
+	.rail-metrics { gap: 3px; }
+	.rail-metric { padding-left: 2px; padding-right: 2px; }
+}
+
 footer {
 	flex-direction: column;
 	align-items: flex-start;
