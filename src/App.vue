@@ -5,14 +5,12 @@ const toast = ref('')
 const activeFeature = ref('rag')
 const readerOpen = ref(false)
 const docSearch = ref('')
-const docsLoading = ref(false)
 const docLoading = ref(false)
 const docError = ref('')
 const docs = ref([])
 const selectedDoc = ref('README.md')
 const docHtml = ref('')
 
-const repoApi = 'https://api.github.com/repos/j2agent-ai/j2agent-docs/git/trees/main?recursive=1'
 const rawBase = 'https://raw.githubusercontent.com/j2agent-ai/j2agent-docs/main/'
 const fallbackDocs = [
   ['README.md', '文档中心'],
@@ -27,6 +25,20 @@ const fallbackDocs = [
   ['agent开发/文档/Agent开发.md', 'Agent 开发'],
   ['agent开发/文档/MCP.md', 'MCP 接入'],
   ['agent开发/文档/Skill.md', 'Skill 技能'],
+  ['agent开发/文档/工具.md', '工具开发'],
+  ['agent开发/文档/可选能力.md', '可选能力'],
+  ['agent开发/文档/README.md', 'Agent 开发入门'],
+  ['agent开发/agents/0_example-agent/README.md', '示例 Agent'],
+  ['平台/RAG机制/SimpleRag.md', 'SimpleRag'],
+  ['平台/RAG机制/静态文件展示机制.md', '静态文件展示'],
+  ['平台/RAG机制/检索/Query预处理.md', 'Query 预处理'],
+  ['平台/RAG机制/知识库维护/知识库维护.md', '知识库维护'],
+  ['平台/LLM提供商配置/README.md', 'LLM 提供商配置'],
+  ['平台/插件Agent接入与界面/README.md', '插件 Agent 接入'],
+  ['平台/文件管理与对象存储/README.md', '文件与对象存储'],
+  ['前端/智能体多任务机制/README.md', '智能体多任务'],
+  ['前端/md解析器/README.md', 'Markdown 解析器'],
+  ['基础设施/docker部署/README.md', 'Docker 部署'],
 ]
 const filteredDocs = computed(() => docs.value.filter((doc) => doc.title.toLowerCase().includes(docSearch.value.toLowerCase()) || doc.path.toLowerCase().includes(docSearch.value.toLowerCase())))
 
@@ -49,16 +61,7 @@ const renderMarkdown = (source) => {
   closeList(); if (inCode) html += `<pre><code>${escapeHtml(code.join('\n'))}</code></pre>`
   return html
 }
-const loadDocIndex = async () => {
-  if (docs.value.length || docsLoading.value) return
-  docsLoading.value = true
-  try {
-    const response = await fetch(repoApi, { headers: { Accept: 'application/vnd.github+json' } })
-    if (!response.ok) throw new Error('GitHub API unavailable')
-    const data = await response.json()
-    docs.value = data.tree.filter((item) => item.type === 'blob' && item.path.toLowerCase().endsWith('.md')).map((item) => ({ path: item.path, title: item.path.split('/').pop().replace(/\.md$/i, '') }))
-  } catch { docs.value = fallbackDocs.map(([path, title]) => ({ path, title })); docError.value = 'GitHub 目录暂时不可用，已切换到内置文档目录。' } finally { docsLoading.value = false }
-}
+const loadDocIndex = () => { if (!docs.value.length) docs.value = fallbackDocs.map(([path, title]) => ({ path, title })) }
 const openReader = () => { readerOpen.value = true; loadDocIndex() }
 const loadDoc = async (path) => {
   selectedDoc.value = path; docLoading.value = true; docError.value = ''
@@ -101,7 +104,7 @@ const features = {
     <section v-if="readerOpen" id="docs" class="reader-overlay" role="dialog" aria-modal="true" aria-label="J2Agent 文档中心">
       <div class="reader-shell glass-panel">
         <header class="reader-head"><div><div class="eyebrow">J2AGENT DOCS · GITHUB</div><h2>文档中心</h2></div><div class="reader-actions"><a href="https://github.com/j2agent-ai/j2agent-docs" target="_blank" rel="noreferrer" class="repo-link">在 GitHub 查看 ↗</a><button class="close-reader" aria-label="关闭文档中心" @click="readerOpen = false">×</button></div></header>
-        <div class="reader-body"><aside class="doc-nav"><input v-model="docSearch" type="search" placeholder="搜索文档" aria-label="搜索文档" /><div v-if="docsLoading" class="doc-state">正在读取文档目录…</div><button v-for="doc in filteredDocs" :key="doc.path" :class="{ active: selectedDoc === doc.path }" @click="loadDoc(doc.path)"><span>{{ doc.path.includes('/') ? '·' : '⌂' }}</span>{{ doc.title }}</button><div v-if="!docsLoading && !filteredDocs.length" class="doc-state">没有匹配的文档</div></aside><article class="markdown-view"><div v-if="docError" class="doc-notice">{{ docError }}</div><div v-if="docLoading" class="doc-state">正在加载正文…</div><div v-else v-html="docHtml"></div></article></div>
+        <div class="reader-body"><aside class="doc-nav"><input v-model="docSearch" type="search" placeholder="搜索文档" aria-label="搜索文档" /><button v-for="doc in filteredDocs" :key="doc.path" :class="{ active: selectedDoc === doc.path }" @click="loadDoc(doc.path)"><span>{{ doc.path.includes('/') ? '·' : '⌂' }}</span>{{ doc.title }}</button><div v-if="!filteredDocs.length" class="doc-state">没有匹配的文档</div></aside><article class="markdown-view"><div v-if="docError" class="doc-notice">{{ docError }}</div><div v-if="docLoading" class="doc-state">正在加载正文…</div><div v-else v-html="docHtml"></div></article></div>
       </div>
     </section>
     <footer><img src="/logo-b.svg" alt="J2Agent AI" /><span>智能体平台 · 让知识成为可执行的力量</span><span class="footer-right">© 2026 J2Agent</span></footer>
