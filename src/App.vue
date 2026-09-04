@@ -1,5 +1,7 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+
+const KbQaWidget = defineAsyncComponent(() => import('./knowledge-qa/KbQaWidget.vue'))
 
 const toast = ref('')
 const activeFeature = ref('rag')
@@ -115,6 +117,7 @@ const handleMarkdownClick = (event) => {
   loadDoc(link.dataset.docPath)
 }
 const openReader = () => { readerOpen.value = true; if (location.hash !== '#docs') history.pushState(null, '', '#docs'); loadDocIndex() }
+const openDocFromAi = (path) => { readerOpen.value = true; if (location.hash !== '#docs') history.pushState(null, '', '#docs'); loadDocIndex(); if (!docs.value.some((doc) => doc.path === path)) docs.value.unshift({ path, title: path.split('/').pop().replace(/\.md$/i, '') }); loadDoc(path) }
 const closeReader = () => { readerOpen.value = false; if (location.hash === '#docs') history.pushState(null, '', '#top') }
 const syncReaderRoute = () => { readerOpen.value = location.hash === '#docs' }
 watch(readerOpen, (open) => { if (open) { loadDocIndex(); if (!docHtml.value) loadDoc(selectedDoc.value) } })
@@ -160,6 +163,7 @@ const features = {
       </div>
     </section>
     <footer><img src="/logo-b.svg" alt="J2Agent AI" /><span>智能体平台 · 让知识成为可执行的力量</span><span class="footer-right">© 2026 J2Agent</span></footer>
+    <KbQaWidget language="zh" @open-doc="openDocFromAi" />
     <transition name="toast"><div v-if="toast" class="toast">{{ toast }}</div></transition>
   </div>
 </template>
