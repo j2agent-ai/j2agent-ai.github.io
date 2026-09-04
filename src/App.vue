@@ -1,15 +1,11 @@
 <script setup>
-import {computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch} from 'vue'
-import {
-	renderMarkdown,
-	renderMarkdownBlocks,
-	cancelPendingMarkdownRenderWork,
-	getMarkdownCodeBlockText,
-	preloadDiagramRuntimes
-} from './knowledge-qa/j2a/utils/markdownRenderer'
+import {computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch} from 'vue'
+import {createPortalMarkdownRenderer} from './portalMarkdown'
+import {createPortalDocumentStore} from './portalDocuments'
 import './knowledge-qa/j2a/styles/markdown.scss'
 
 const KbQaWidget = defineAsyncComponent(() => import('./knowledge-qa/KbQaWidget.vue'))
+import GlobalTopbar from './GlobalTopbar.vue'
 
 const copy = {
 	docs: '文档中心',
@@ -69,6 +65,7 @@ const docPath = ref('')
 const docHtml = ref('')
 const docContentRef = ref(null)
 const previewImage = ref('')
+const mobileDocsNavOpen = ref(false)
 
 const rawBase = 'https://j2agent-ai.jerryt92.top/j2agent-docs/'
 const fallbackDocs = [
@@ -122,6 +119,13 @@ const fallbackDocs = [
 ]
 const filteredDocs = computed(() => docs.value.filter((doc) => doc.title.toLowerCase().includes(docSearch.value.toLowerCase()) || doc.path.toLowerCase().includes(docSearch.value.toLowerCase())))
 const collapsedDirs = ref(new Set())
+const selectedDocTitle = computed(() =>
+	docs.value.find((doc) => doc.path === selectedDoc.value)?.title ||
+	selectedDoc.value.split('/').pop()?.replace(/\.md$/i, '') ||
+	'当前文档'
+)
+const isMobileDocsViewport = () =>
+	typeof window !== 'undefined' && window.matchMedia('(max-width: 600px)').matches
 const treeRows = computed(() => {
 	const query = docSearch.value.trim().toLowerCase()
 	if (query) {
@@ -153,7 +157,9 @@ const treeRows = computed(() => {
 	const rows = []
 	const walk = (node, depth) => {
 		for (const dir of node.dirs) {
-			const expanded = !collapsedDirs.value.has(dir.path)
+			const isCurrentBranch = selectedDoc.value.startsWith(`${dir.path}/`)
+			const expanded = !collapsedDirs.value.has(dir.path) &&
+				(!isMobileDocsViewport() || isCurrentBranch)
 			rows.push({type: 'dir', name: dir.name, path: dir.path, depth, expanded})
 			if (expanded) walk(dir, depth + 1)
 		}
@@ -170,40 +176,12 @@ const toggleDocDir = (path) => {
 	collapsedDirs.value = next
 }
 
-const escapeHtml = (value) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
-const resolveDocAsset = (value, docPath) => {
-	if (/^(https?:|data:|\/)/.test(value)) return value
-	const folder = docPath.includes('/') ? docPath.slice(0, docPath.lastIndexOf('/') + 1) : ''
-	return rawBase + (folder + value.replace(/^\.\//, '')).split('/').map(encodeURIComponent).join('/')
-}
-const resolveDocLink = (value, docPath) => {
-	const clean = decodeURIComponent(value.split('#')[0].split('?')[0])
-	const folder = docPath.includes('/') ? docPath.slice(0, docPath.lastIndexOf('/') + 1) : ''
-	const parts = (folder + clean.replace(/^\.\//, '')).split('/')
-	const normalized = []
-	for (const part of parts) {
-		if (!part || part === '.') continue;
-		if (part === '..') normalized.pop(); else normalized.push(part)
-	}
-	return normalized.join('/')
-}
-const prepareDocMarkdown = (source, docPath) => source.replace(
-	/!\[([^\]]*)\]\(([^)]+)\)/g,
-	(match, alt, url) => `![${alt}](${resolveDocAsset(url.trim(), docPath)})`
-)
-
-const renderDocMarkdown = (source, docPath) => {
-	let html = renderMarkdown(prepareDocMarkdown(source, docPath))
-	// 保留文档中心的站内 Markdown 跳转行为；普通外链仍由 markdownRenderer 处理。
-	html = html.replace(/href="([^\"]+\.md(?:#[^\"]*)?)"/gi, (_, url) =>
-		`href="#docs" data-doc-path="${escapeHtml(resolveDocLink(url, docPath))}"`
-	)
-	return html
-}
+const renderDocMarkdown = createPortalMarkdownRenderer({baseUrl: rawBase})
+const documentStore = createPortalDocumentStore({baseUrl: rawBase, index: fallbackDocs})
 const copyMarkdownBlock = async (button) => {
 	const block = button.closest('.md-code-block')
 	if (!block) return
-	const content = getMarkdownCodeBlockText(block).trimEnd()
+	const content = block.querySelector('pre')?.textContent?.trimEnd() || ''
 	if (!content) return
 	try {
 		if (navigator.clipboard?.writeText) {
@@ -224,30 +202,20 @@ const copyMarkdownBlock = async (button) => {
 	}
 }
 const loadDocIndex = () => {
-	if (!docs.value.length) docs.value = fallbackDocs.map(([path, title]) => ({path, title}))
+	if (!docs.value.length) docs.value = documentStore.list()
 }
 const loadDoc = async (path) => {
 	selectedDoc.value = path;
+	if (isMobileDocsViewport()) mobileDocsNavOpen.value = false
 	if (location.hash.split('?')[0] === '#docs') {
 		history.replaceState(null, '', `#docs?path=${encodeURIComponent(path)}`)
 	}
 	docLoading.value = true;
 	docError.value = ''
 	try {
-		const response = await fetch(rawBase + path.split('/').map(encodeURIComponent).join('/'));
-		if (!response.ok) throw new Error('Document unavailable');
-		docHtml.value = renderDocMarkdown(await response.text(), path)
-		await nextTick()
-		if (docContentRef.value) {
-			await renderMarkdownBlocks(docContentRef.value, {
-				scrollRoot: docContentRef.value.parentElement,
-				concurrency: 4,
-				backgroundConcurrency: 2,
-				lazy: true,
-				prefetchRootMargin: '1600px 0px'
-			})
-		}
-	} catch {
+		docHtml.value = renderDocMarkdown(await documentStore.load(path), path)
+	} catch (error) {
+		if (error?.name === 'AbortError') return
 		docHtml.value = '<p>文档加载失败，请稍后重试，或直接打开 GitHub 文档仓库。</p>';
 		docError.value = '正文加载失败';
 	} finally {
@@ -310,14 +278,13 @@ watch(readerOpen, (open) => {
 })
 onMounted(() => {
 	syncReaderRoute();
-	preloadDiagramRuntimes()
 	window.addEventListener('hashchange', syncReaderRoute)
 	window.addEventListener('keydown', handleGlobalKeydown)
 })
 onBeforeUnmount(() => {
 	window.removeEventListener('hashchange', syncReaderRoute)
 	window.removeEventListener('keydown', handleGlobalKeydown)
-	cancelPendingMarkdownRenderWork(docContentRef.value)
+	documentStore.cancel()
 })
 const notify = (message) => {
 	toast.value = message
@@ -355,16 +322,9 @@ const features = {
 
 <template>
 	<div class="site-shell" :class="{ 'docs-mode': readerOpen }">
-		<header class="topbar glass-panel">
-			<a href="#top" class="brand"><img src="/logo-b.svg" alt="J2Agent AI"/></a>
-			<nav><a href="#technology">{{ copy.technology }}</a><a href="#product">{{ copy.product }}</a><a
-				href="#architecture">{{ copy.architecture }}</a></nav>
-			<div class="topbar-actions">
-				<button class="glass-button blue docs-entry" type="button" @click="openReader"><svg class="document-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6.5 3.75h7.1L18 8.2v12.05H6.5zM13.5 3.75V8.2H18M9 12h6M9 15.5h6"/></svg><span>{{ copy.docs }}</span><span aria-hidden="true">↗</span></button>
-			</div>
-		</header>
+		<GlobalTopbar @open-doc="openReader" />
 
-		<main id="top">
+		<main>
 			<section class="hero section-wrap">
 				<div class="hero-copy">
 					<div class="eyebrow"><i></i> {{ copy.heroEyebrow }}</div>
@@ -494,7 +454,15 @@ const features = {
 					                               class="repo-link"><svg class="github-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .7a11.3 11.3 0 0 0-3.57 22.02c.57.1.78-.25.78-.55v-2.1c-3.18.7-3.85-1.35-3.85-1.35-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.25 3.33.96.1-.74.4-1.25.73-1.54-2.54-.29-5.2-1.27-5.2-5.66 0-1.25.45-2.27 1.18-3.07-.12-.29-.51-1.45.11-3.03 0 0 .96-.31 3.12 1.17a10.8 10.8 0 0 1 5.68 0c2.16-1.48 3.12-1.17 3.12-1.17.62 1.58.23 2.74.11 3.03.73.8 1.18 1.82 1.18 3.07 0 4.4-2.67 5.36-5.22 5.64.41.36.78 1.08.78 2.18v3.23c0 .3.2.66.79.55A11.3 11.3 0 0 0 12 .7Z"/></svg><span>{{ copy.github }}</span><span aria-hidden="true">↗</span></a></div>
 				</header>
 				<div class="reader-body">
-					<aside class="doc-nav"><input v-model="docSearch" type="search" :placeholder="copy.searchDocs"
+					<div class="mobile-doc-toolbar">
+						<button type="button" class="mobile-doc-nav-toggle" :aria-expanded="mobileDocsNavOpen"
+						        @click="mobileDocsNavOpen = !mobileDocsNavOpen">
+							<span class="mobile-doc-nav-label">目录</span>
+							<span class="mobile-doc-current" :title="selectedDoc">{{ selectedDocTitle }}</span>
+							<span class="mobile-doc-nav-chevron">{{ mobileDocsNavOpen ? '⌃' : '⌄' }}</span>
+						</button>
+					</div>
+					<aside class="doc-nav" :class="{ 'mobile-doc-nav-open': mobileDocsNavOpen }"><input v-model="docSearch" type="search" :placeholder="copy.searchDocs"
 					                              :aria-label="copy.searchDocs"/>
 						<div class="path-loader"><input v-model="docPath" type="text" :placeholder="copy.path"
 						                                aria-label="输入任意 Markdown 路径" @keyup.enter="loadDocByPath"/>

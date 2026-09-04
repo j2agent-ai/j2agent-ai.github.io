@@ -20,3 +20,78 @@
 .docs-entry{display:inline-flex;align-items:center;gap:7px}.document-icon{width:16px;height:16px;display:block;flex:none}
 .doc-tree-row{display:flex!important;align-items:center;gap:7px;padding-left:calc(11px + var(--tree-depth) * 18px)!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.doc-tree-dir{font-weight:600;color:#4c6380!important}.doc-tree-file{color:#657995!important}.doc-tree-file.active{color:#245fb9!important}.doc-tree-chevron{width:12px;color:#7fa1d4;font-size:18px;line-height:1}.doc-tree-file-icon{width:12px;color:#9ab1d2;font-size:18px;line-height:1}
 .site-shell.docs-mode .markdown-view.message-md{color:#263449;background:#fff;padding:46px clamp(28px,5vw,76px);font-size:16px;line-height:1.85}.site-shell.docs-mode .markdown-view.message-md>div{max-width:920px;margin:0 auto}.site-shell.docs-mode .markdown-view.message-md p,.site-shell.docs-mode .markdown-view.message-md li{font-size:16px;line-height:1.85;color:#344861}.site-shell.docs-mode .markdown-view.message-md h1{font-size:34px;line-height:1.3;color:#1e3048;margin:0 0 30px;padding-bottom:18px;border-bottom:2px solid #d8e3f1}.site-shell.docs-mode .markdown-view.message-md h2{font-size:26px;line-height:1.4;color:#243b59;margin-top:38px;padding-bottom:8px;border-bottom:1px solid #e1e9f3}.site-shell.docs-mode .markdown-view.message-md h3{font-size:21px;color:#2f4969;margin-top:28px}.site-shell.docs-mode .markdown-view.message-md h4,.site-shell.docs-mode .markdown-view.message-md h5,.site-shell.docs-mode .markdown-view.message-md h6{color:#3d5674}.site-shell.docs-mode .markdown-view.message-md a{color:#245fb9;text-decoration:underline;text-underline-offset:3px}.site-shell.docs-mode .markdown-view.message-md blockquote{margin:22px 0;padding:14px 18px;border-left:4px solid #5b8fdd;background:#f2f6fc;color:#4a607c}.site-shell.docs-mode .markdown-view.message-md code:not(pre code){color:#245b9f;background:#edf3fb;border-color:#c7d8ed}.site-shell.docs-mode .markdown-view.message-md .md-code-block,.site-shell.docs-mode .markdown-view.message-md pre{background:#1e2c3d;border-color:#3c516b;box-shadow:0 8px 22px rgba(28,48,74,.16)}.site-shell.docs-mode .markdown-view.message-md .md-code-lang{color:#b9cbe0}.site-shell.docs-mode .markdown-view.message-md .md-table-wrap{background:#fff;border:1px solid #cbd8e8;box-shadow:0 5px 18px rgba(39,67,101,.08)}.site-shell.docs-mode .markdown-view.message-md thead.md-thead .md-th{background:#eaf1fa;color:#263449;border-bottom-color:#cbd8e8}.site-shell.docs-mode .markdown-view.message-md tbody.md-tbody .md-td{color:#344861;border-bottom-color:#dbe4ef}.site-shell.docs-mode .markdown-view.message-md tbody.md-tbody .md-tr:nth-child(even) .md-td{background:#f7faff}.site-shell.docs-mode .markdown-view.message-md .md-diagram-body{background:#f7faff;border-color:#cbd8e8;color:#344861}.site-shell.docs-mode .markdown-view.message-md .md-html-preview-wrap{background:#f7faff;border-color:#cbd8e8}
+/* 文档中心桌面端与移动端统一为平面页面：Markdown 不再被多层容器包围 */
+.site-shell.docs-mode>.reader-overlay{background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none}
+.site-shell.docs-mode .reader-shell{border:0;border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
+.site-shell.docs-mode .reader-head{background:transparent}
+.site-shell.docs-mode .reader-shell{height:auto;min-height:0;overflow:visible}
+.site-shell.docs-mode .reader-body{background:transparent;min-height:0}
+.site-shell.docs-mode .doc-nav{background:transparent;border-right:0}
+.site-shell.docs-mode .markdown-view,.site-shell.docs-mode .markdown-view.message-md{background:transparent;box-shadow:none;overflow:visible}
+/* 文档中心顶栏是页面结构，不使用悬浮玻璃卡片 */
+.site-shell.docs-mode>.topbar{position:relative;top:auto;width:100%;margin:0;padding-left:max(4vw,24px);padding-right:max(4vw,24px);border:0;border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
+/* 标准网站文档流布局：顶栏、文档头、目录与正文依次占位 */
+.site-shell.docs-mode>.topbar{position:static;flex:none}
+.site-shell.docs-mode>.reader-overlay{position:static;display:block;inset:auto;padding:0;min-height:0}
+.site-shell.docs-mode .reader-shell{position:static;display:flex;width:100%;height:auto;min-height:0;margin:0;overflow:visible}
+.site-shell.docs-mode .reader-head{position:static;flex:none}
+.site-shell.docs-mode .reader-body{position:static;flex:none}
+/* 全局顶栏统一采用正常页面流，不再是悬浮玻璃卡片 */
+.topbar{position:sticky;top:0;z-index:50;width:100%;margin:0;padding-left:max(4vw,24px);padding-right:max(4vw,24px);border:0;border-radius:0;background:rgba(237,242,248,.94);box-shadow:none;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.site-shell.docs-mode>.topbar{position:sticky;top:0;z-index:50;margin:0;background:rgba(237,242,248,.94);box-shadow:none;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+@media(max-width:500px){.topbar{height:62px;margin:0;padding-left:16px;padding-right:16px}}
+/* mobile docs: one page scroll, collapsed directory */
+.mobile-doc-toolbar{display:none}
+@media(max-width:600px){
+html,body{min-width:320px;overflow-x:hidden}
+.site-shell.docs-mode{min-height:100dvh;height:auto;overflow:visible}
+.site-shell.docs-mode>.topbar{position:relative;top:auto;margin:10px 12px 0;width:auto}
+.site-shell.docs-mode>.reader-overlay{position:relative;inset:auto;min-height:0;padding:10px 0 30px;background:transparent}
+.site-shell.docs-mode .reader-shell{width:100%;height:auto;min-height:0;margin:0;border:0;border-radius:0;overflow:visible;background:transparent;box-shadow:none;backdrop-filter:none}
+.site-shell.docs-mode .reader-head{height:auto;min-height:72px;padding:18px 18px 14px;background:rgba(247,250,254,.96);border-bottom:1px solid #dce5ef}
+.site-shell.docs-mode .reader-head h2{font-size:24px}
+.site-shell.docs-mode .reader-actions{gap:0}
+.site-shell.docs-mode .repo-link{display:inline-flex;font-size:0;padding:8px}
+.site-shell.docs-mode .repo-link .github-icon{width:20px;height:20px}
+.site-shell.docs-mode .repo-link span{display:none}
+.site-shell.docs-mode .reader-body{display:block;min-height:0}
+.site-shell.docs-mode .mobile-doc-toolbar{display:block;padding:10px 14px 0;background:#f7faff}
+.site-shell.docs-mode .mobile-doc-nav-toggle{display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:10px 12px;border:1px solid #d6e2f0;border-radius:12px;background:#fff;color:#3d5674;font:600 14px inherit;text-align:left;box-shadow:0 3px 12px rgba(48,79,117,.06)}
+.site-shell.docs-mode .mobile-doc-nav-label{color:#245fb9;flex:none}
+.site-shell.docs-mode .mobile-doc-current{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#617794;font-weight:500}
+.site-shell.docs-mode .mobile-doc-nav-chevron{margin-left:auto;color:#6e94cc;font-size:18px;line-height:1}
+.site-shell.docs-mode .doc-nav{display:none;padding:12px 14px 8px;max-height:none;overflow:visible;border:0;background:#f7faff}
+.site-shell.docs-mode .doc-nav.mobile-doc-nav-open{display:block}
+.site-shell.docs-mode .doc-nav input{font-size:14px;padding:12px 13px;margin-bottom:10px}
+.site-shell.docs-mode .path-loader{margin-bottom:10px}
+.site-shell.docs-mode .path-loader input{font-size:13px}
+.site-shell.docs-mode .doc-tree-row{min-height:42px;padding-top:8px!important;padding-bottom:8px!important;font-size:14px}
+.site-shell.docs-mode .markdown-view{min-height:0;max-width:none;overflow:visible;padding:28px 18px 56px;background:#fff}
+.site-shell.docs-mode .markdown-view.message-md{padding:30px 18px 60px;font-size:16px;line-height:1.85}
+.site-shell.docs-mode .markdown-view.message-md>div{max-width:none;margin:0}
+.site-shell.docs-mode .markdown-view.message-md h1{font-size:28px;overflow-wrap:anywhere}
+.site-shell.docs-mode .markdown-view.message-md h2{font-size:23px}
+.site-shell.docs-mode .markdown-view.message-md pre,.site-shell.docs-mode .markdown-view.message-md .md-code-block{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.site-shell.docs-mode .markdown-view.message-md .md-table-wrap{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.site-shell.docs-mode .markdown-view.message-md .md-diagram-body{max-width:100%;overflow:hidden}
+}
+/* 唯一全局顶栏行为：所有页面都在正常布局中占位，并始终吸附在视口顶部 */
+.site-shell{overflow:visible}
+.topbar,.site-shell.docs-mode>.topbar{position:sticky!important;top:0!important;z-index:50;width:100%;margin:0;background:rgba(237,242,248,.94);box-shadow:none;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+@media(max-width:600px){
+  /* 文档页移动端采用页面流，不使用卡片/面板容器 */
+  .site-shell.docs-mode>.topbar{width:100%;margin:0;padding-left:16px;padding-right:16px;border:0;border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
+  .site-shell.docs-mode>.reader-overlay,
+  .site-shell.docs-mode .reader-shell,
+  .site-shell.docs-mode .reader-head,
+  .site-shell.docs-mode .mobile-doc-toolbar,
+  .site-shell.docs-mode .doc-nav,
+  .site-shell.docs-mode .markdown-view{background:transparent;border:0;border-radius:0;box-shadow:none}
+  .site-shell.docs-mode .reader-head{padding-left:0;padding-right:0}
+  .site-shell.docs-mode .mobile-doc-toolbar{padding-left:0;padding-right:0}
+  .site-shell.docs-mode .mobile-doc-nav-toggle{min-height:42px;padding:8px 0;border:0;border-radius:0;background:transparent;box-shadow:none}
+  .site-shell.docs-mode .doc-nav{padding-left:0;padding-right:0}
+  .site-shell.docs-mode .markdown-view,
+  .site-shell.docs-mode .markdown-view.message-md{padding-left:0;padding-right:0;background:transparent}
+  .site-shell.docs-mode .markdown-view.message-md h1{border-bottom:1px solid #d8e3f1}
+}
