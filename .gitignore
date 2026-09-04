@@ -35,3 +35,4 @@ yarn-error.log
 /lib/common/styles/_oem-vars.scss
 components.d.ts
 auto-imports.d.ts
+.env
