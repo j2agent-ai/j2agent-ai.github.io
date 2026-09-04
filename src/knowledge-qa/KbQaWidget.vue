@@ -704,7 +704,6 @@ function openSrcPreview(files: KbSrcFile[], index: number) {
   const clicked = files[index]
   const repoPath = repoMarkdownPath(clicked)
   if (repoPath.toLowerCase().endsWith('.md')) {
-    open.value = false
     emit('openDoc', repoPath)
     return
   }
