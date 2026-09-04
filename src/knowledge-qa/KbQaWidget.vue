@@ -71,7 +71,6 @@ const messages = session.messages
 const isBusy = session.isBusy
 const connecting = session.connecting
 const sending = session.sending
-const agentState = session.agentState
 const errorMessage = session.errorMessage
 const messagesEl = ref<HTMLElement | null>(null)
 const inputEl = ref<HTMLTextAreaElement | null>(null)
@@ -111,22 +110,7 @@ const configReady = computed(
 )
 
 const statusLabel = computed(() => {
-  if (connecting.value) {
-    return text.value.connecting
-  }
-  const state = agentState.value
-  if (state === 'STREAMING_TEXT') {
-    return text.value.answering
-  }
-  if (
-    state === 'THINKING' ||
-    state === 'CALLING_TOOL' ||
-    state === 'LOAD_SKILL' ||
-    state === 'AGENT_ORCHESTRATING'
-  ) {
-    return text.value.thinking
-  }
-  return ''
+  return isBusy.value ? text.value.thinking : ''
 })
 
 const canSend = computed(
@@ -760,14 +744,14 @@ function handleBubbleClick(event: MouseEvent) {
       class="kb-qa-root"
       :class="{ 'is-morphing': morphing }"
       :data-open="open"
-      :data-busy="isBusy || connecting"
+      :data-busy="isBusy"
     >
       <Transition name="kb-qa-fab">
         <button
           v-show="!open"
           type="button"
           class="kb-qa-fab"
-          :class="{ 'is-busy': isBusy || connecting }"
+          :class="{ 'is-busy': isBusy }"
           :aria-label="fabAriaLabel"
           :title="fabAriaLabel"
           @click="toggleOpen"
@@ -1135,7 +1119,7 @@ function handleBubbleClick(event: MouseEvent) {
   --n-color-neutral-w: var(--n-color-bg-elevated);
   --n-color-preview-bg: var(--n-color-bg-subtle);
   position: fixed;
-  /* 胶囊与展开面板共用同一右下锚点，避免形变时漂移 */
+  /* 胶囊与展开面板共用同一右下锚点 */
   right: max(48px, env(safe-area-inset-right, 0px));
   bottom: max(36px, env(safe-area-inset-bottom, 0px));
   z-index: var(--kb-qa-z);
@@ -1616,21 +1600,94 @@ function handleBubbleClick(event: MouseEvent) {
   padding: 28px 12px 20px;
   width: 100%;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .kb-qa-welcome-orb {
+  position: relative;
+  isolation: isolate;
   width: 48px;
   height: 48px;
   border-radius: 16px;
   background:
-    radial-gradient(
-      circle at 30% 30%,
-      color-mix(in srgb, var(--n-color-primary) 35%, white),
-      color-mix(in srgb, var(--n-color-primary) 12%, transparent) 70%
-    );
-  box-shadow: var(--n-shadow-elevation-1);
-  animation: kb-qa-orb-float 4.5s var(--kb-qa-ease) infinite;
+    radial-gradient(circle at 24% 22%, #ffffffd9 0 8%, transparent 30%),
+    radial-gradient(circle at 76% 72%, #ff8fcf99 0 4%, transparent 38%),
+    linear-gradient(135deg, #67a8ff 0%, #8d8cff 34%, #e18bdf 66%, #62d9e9 100%);
+  background-size: 100% 100%, 180% 180%, 240% 240%;
+  background-position: 0 0, 80% 20%, 0% 50%;
+  box-shadow:
+    0 8px 18px color-mix(in srgb, var(--n-color-primary) 16%, transparent),
+    var(--n-shadow-elevation-1);
+  animation: kb-qa-orb-float 4.5s var(--kb-qa-ease) infinite, kb-qa-orb-gradient 7s ease-in-out infinite;
+}
+
+.kb-qa-welcome-orb::before,
+.kb-qa-welcome-orb::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+}
+
+.kb-qa-welcome-orb::before {
+  z-index: -1;
+  inset: -14px;
+  border-radius: 22px;
+  background: radial-gradient(
+    circle at 30% 30%,
+    #71b7ff66 0%,
+    #b38bff40 32%,
+    #ff91d52e 52%,
+    transparent 74%
+  );
+  filter: blur(8px);
+  opacity: .72;
+  animation: kb-qa-orb-glow 3.8s ease-in-out infinite;
+}
+
+.kb-qa-welcome-orb::after {
+  inset: 6px;
+  border-radius: 11px;
+  background: conic-gradient(
+    from 20deg,
+    transparent,
+    color-mix(in srgb, #fff 66%, transparent),
+    transparent 30%,
+    #ff9bdd66 52%,
+    transparent 72%,
+    #66d9ff55 88%,
+    transparent 100%
+  );
+  mix-blend-mode: screen;
+  opacity: .7;
+  animation: kb-qa-orb-shimmer 4.8s linear infinite;
+}
+
+@keyframes kb-qa-orb-glow {
+  0%,
+  100% {
+    transform: scale(.86);
+    opacity: .48;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: .86;
+  }
+}
+
+@keyframes kb-qa-orb-gradient {
+  0%,
+  100% {
+    background-position: 0 0, 80% 20%, 0% 50%;
+  }
+  50% {
+    background-position: 0 0, 20% 80%, 100% 50%;
+  }
+}
+
+@keyframes kb-qa-orb-shimmer {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes kb-qa-orb-float {

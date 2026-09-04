@@ -1,6 +1,6 @@
 <script setup>
-import {computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch} from 'vue'
-import {createPortalMarkdownRenderer} from './portalMarkdown'
+import {computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch} from 'vue'
+import {createPortalDiagramRenderer, createPortalMarkdownRenderer} from './portalMarkdown'
 import {createPortalDocumentStore} from './portalDocuments'
 import './knowledge-qa/j2a/styles/markdown.scss'
 
@@ -65,7 +65,10 @@ const docPath = ref('')
 const docHtml = ref('')
 const docContentRef = ref(null)
 const previewImage = ref('')
+const diagramPreview = ref('')
 const mobileDocsNavOpen = ref(false)
+const screenIndex = ref(0)
+let screenRotationTimer = null
 
 const rawBase = 'https://j2agent-ai.jerryt92.top/j2agent-docs/'
 const fallbackDocs = [
@@ -177,6 +180,7 @@ const toggleDocDir = (path) => {
 }
 
 const renderDocMarkdown = createPortalMarkdownRenderer({baseUrl: rawBase})
+const portalDiagramRenderer = createPortalDiagramRenderer()
 const documentStore = createPortalDocumentStore({baseUrl: rawBase, index: fallbackDocs})
 const copyMarkdownBlock = async (button) => {
 	const block = button.closest('.md-code-block')
@@ -205,6 +209,7 @@ const loadDocIndex = () => {
 	if (!docs.value.length) docs.value = documentStore.list()
 }
 const loadDoc = async (path) => {
+	portalDiagramRenderer.cancel()
 	selectedDoc.value = path;
 	if (isMobileDocsViewport()) mobileDocsNavOpen.value = false
 	if (location.hash.split('?')[0] === '#docs') {
@@ -214,6 +219,11 @@ const loadDoc = async (path) => {
 	docError.value = ''
 	try {
 		docHtml.value = renderDocMarkdown(await documentStore.load(path), path)
+		docLoading.value = false
+		await nextTick()
+		if (docContentRef.value) {
+			void portalDiagramRenderer.render(docContentRef.value)
+		}
 	} catch (error) {
 		if (error?.name === 'AbortError') return
 		docHtml.value = '<p>文档加载失败，请稍后重试，或直接打开 GitHub 文档仓库。</p>';
@@ -243,6 +253,12 @@ const handleMarkdownClick = (event) => {
 		void copyMarkdownBlock(target)
 		return
 	}
+	const diagram = clicked?.closest('.md-diagram')
+	if (diagram && clicked?.closest('svg')) {
+		event.preventDefault()
+		openDiagramPreview(diagram)
+		return
+	}
 	const link = clicked?.closest('a[data-doc-path]')
 	if (!link) return
 	event.preventDefault()
@@ -266,9 +282,13 @@ const openDocFromAi = (path) => {
 	loadDoc(path)
 }
 const syncReaderRoute = () => {
-	readerOpen.value = location.hash.split('?')[0] === '#docs'
+	const shouldOpen = location.hash.split('?')[0] === '#docs'
+	readerOpen.value = shouldOpen
 	const path = getDocPathFromUrl()
-	if (path) selectedDoc.value = path
+	if (path && path !== selectedDoc.value) {
+		selectedDoc.value = path
+		if (shouldOpen) void loadDoc(path)
+	}
 }
 watch(readerOpen, (open) => {
 	if (open) {
@@ -280,11 +300,16 @@ onMounted(() => {
 	syncReaderRoute();
 	window.addEventListener('hashchange', syncReaderRoute)
 	window.addEventListener('keydown', handleGlobalKeydown)
+	screenRotationTimer = window.setInterval(() => {
+		screenIndex.value = (screenIndex.value + 1) % screens.length
+	}, 4600)
 })
 onBeforeUnmount(() => {
 	window.removeEventListener('hashchange', syncReaderRoute)
 	window.removeEventListener('keydown', handleGlobalKeydown)
 	documentStore.cancel()
+	portalDiagramRenderer.cancel()
+	if (screenRotationTimer) window.clearInterval(screenRotationTimer)
 })
 const notify = (message) => {
 	toast.value = message
@@ -296,14 +321,48 @@ const openImagePreview = (event) => {
 	if (image) previewImage.value = image.currentSrc || image.src
 }
 const closeImagePreview = () => { previewImage.value = '' }
-const handleGlobalKeydown = (event) => { if (event.key === 'Escape') closeImagePreview() }
+const openDiagramPreview = (diagram) => {
+	const svg = diagram.querySelector('svg')
+	if (!svg) return
+	const clone = svg.cloneNode(true)
+	clone.style.width = ''
+	clone.style.height = ''
+	clone.style.maxWidth = ''
+	clone.style.maxHeight = ''
+	clone.style.margin = ''
+	const viewBox = clone.viewBox?.baseVal
+	if (viewBox?.width && viewBox?.height) {
+		clone.setAttribute('width', String(viewBox.width))
+		clone.setAttribute('height', String(viewBox.height))
+	}
+	diagramPreview.value = clone.outerHTML
+}
+const closeDiagramPreview = () => { diagramPreview.value = '' }
+const rotateScreen = () => { screenIndex.value = (screenIndex.value + 1) % screens.length }
+const handleGlobalKeydown = (event) => {
+	if (event.key === 'Escape') {
+		closeImagePreview()
+		closeDiagramPreview()
+	}
+}
+
+const screens = [
+	{ image: '/screens/02-chat-analysis.png', title: '通用 AI 助手', description: '调用工具，流式输出分析结果' },
+	{ image: '/screens/01-task-list.png', title: '任务与执行轨迹', description: '多任务状态实时可见' },
+	{ image: '/screens/03-kb-list.png', title: '知识库管理', description: '远程仓库与访问权限统一管理' },
+	{ image: '/screens/04-kb-sync.png', title: '知识库同步', description: '增量维护，状态清晰可追溯' },
+	{ image: '/screens/05-chat-audit.png', title: 'RAG 参数配置', description: '稠密与稀疏权重可调' },
+	{ image: '/screens/06-rag-settings.png', title: 'Token 与会话审计', description: '跨用户记录可查询、可复盘' },
+	{ image: '/screens/07-agent-management.png', title: '智能体管理', description: '权限、插件与全局配置集中维护' }
+]
+const displayScreens = computed(() => [...screens.slice(screenIndex.value), ...screens.slice(0, screenIndex.value)])
 
 const features = {
 	rag: {
 		label: 'RAG 检索增强',
 		title: '让答案有据可依',
 		body: '从文档入库、切片、向量化到召回与来源展示，构成一条完整的知识增强链路。',
-		chips: ['稠密向量', 'BM25 稀疏检索', 'Milvus 融合排序']
+		chips: ['稠密向量', 'BM25 稀疏检索', '融合排序']
 	},
 	agent: {
 		label: 'Agent 编排',
@@ -366,14 +425,17 @@ const features = {
 				<div class="tech-layout">
 					<div class="tech-tabs">
 						<button v-for="(feature, key) in features" :key="key" :class="{ selected: activeFeature === key }"
-						        @click="activeFeature = key"><span>0{{
-								Object.keys(features).indexOf(key) + 1
-							}}</span><strong>{{ feature.label }}</strong><b>↗</b></button>
+						        @click="activeFeature = key"><i class="tech-tab-icon" aria-hidden="true">
+								<svg v-if="key === 'rag'" viewBox="0 0 24 24" fill="none"><path d="M4 6.5C4 5.12 7.58 4 12 4s8 1.12 8 2.5S16.42 9 12 9 4 7.88 4 6.5Z" stroke="currentColor" stroke-width="1.8"/><path d="M4 6.5v5C4 12.88 7.58 14 12 14c.9 0 1.76-.05 2.55-.15M4 11.5v5C4 17.88 7.58 19 12 19c.91 0 1.77-.05 2.56-.15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="m16.5 15.5 3.5-3.5m0 0v3m0-3h-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+								<svg v-else-if="key === 'agent'" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="5" r="2.5" stroke="currentColor" stroke-width="1.8"/><circle cx="5.5" cy="18" r="2.5" stroke="currentColor" stroke-width="1.8"/><circle cx="18.5" cy="18" r="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M10.9 7.2 6.6 15.8m6.5-8.6 4.3 8.6M8 18h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+								<svg v-else viewBox="0 0 24 24" fill="none"><path d="M3 12h4l2-5 4 10 2-5h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.4" opacity=".35"/></svg>
+							</i><strong>{{ feature.label }}</strong><b>↗</b></button>
 					</div>
 					<div class="tech-detail glass-panel">
 						<div class="detail-kicker">{{ features[activeFeature].label }}</div>
 						<h3>{{ features[activeFeature].title }}</h3>
-						<p>{{ features[activeFeature].body }}</p>
+						<p v-if="activeFeature === 'rag'">以 <a class="tech-link milvus-link" href="https://milvus.io" target="_blank" rel="noopener noreferrer"><img src="/milvus-logo.svg" alt="Milvus"/></a> 为向量检索底座，承载企业知识的高效存储与近似最近邻搜索；结合 BM25 稀疏检索与融合排序，在检索速度、规模和召回质量之间取得平衡。</p>
+						<p v-else>{{ features[activeFeature].body }}</p>
 						<div class="chip-row"><span v-for="chip in features[activeFeature].chips" :key="chip">{{ chip }}</span></div>
 						<div class="detail-diagram">
 							<div class="diagram-node">输入</div>
@@ -395,29 +457,17 @@ const features = {
 						<div class="eyebrow">{{ copy.productEyebrow }}</div>
 						<h2>{{ copy.productTitle[0] }}<br/><span>{{ copy.productTitle[1] }}</span></h2></div>
 					<p>{{ copy.productBody }}</p></div>
-				<div class="screen-grid" @click="openImagePreview">
-					<figure class="screen-card wide"><img src="/screens/02-chat-analysis.png"
-					                                      alt="J2Agent 通用 AI 助手与分析结果界面"/>
-						<figcaption><strong>通用 AI 助手</strong><span>调用工具，流式输出分析结果</span></figcaption>
-					</figure>
-					<figure class="screen-card"><img src="/screens/01-task-list.png" alt="J2Agent 智能体任务列表界面"/>
-						<figcaption><strong>任务与执行轨迹</strong><span>多任务状态实时可见</span></figcaption>
-					</figure>
-					<figure class="screen-card"><img src="/screens/03-kb-list.png" alt="J2Agent 知识库列表界面"/>
-						<figcaption><strong>知识库管理</strong><span>远程仓库与访问权限统一管理</span></figcaption>
-					</figure>
-					<figure class="screen-card"><img src="/screens/04-kb-sync.png" alt="J2Agent 知识库同步状态界面"/>
-						<figcaption><strong>知识库同步</strong><span>增量维护，状态清晰可追溯</span></figcaption>
-					</figure>
-					<figure class="screen-card"><img src="/screens/05-chat-audit.png" alt="J2Agent RAG 检索设置界面"/>
-						<figcaption><strong>RAG 参数配置</strong><span>稠密与稀疏权重可调</span></figcaption>
-					</figure>
-					<figure class="screen-card"><img src="/screens/06-rag-settings.png" alt="J2Agent 聊天审计界面"/>
-						<figcaption><strong>Token 与会话审计</strong><span>跨用户记录可查询、可复盘</span></figcaption>
-					</figure>
-					<figure class="screen-card"><img src="/screens/07-agent-management.png" alt="J2Agent 智能体管理界面"/>
-						<figcaption><strong>智能体管理</strong><span>权限、插件与全局配置集中维护</span></figcaption>
-					</figure>
+				<div class="screen-deck-wrap">
+					<div class="screen-grid screen-deck" @click="openImagePreview">
+						<figure v-for="(screen, index) in displayScreens" :key="screen.image" class="screen-card" :class="{ 'screen-card-active': index === 0 }">
+							<img :src="screen.image" :alt="`J2Agent ${screen.title}界面`"/>
+							<figcaption><strong>{{ screen.title }}</strong><span>{{ screen.description }}</span></figcaption>
+						</figure>
+					</div>
+					<div class="screen-deck-controls">
+						<span>产品界面 · {{ screenIndex + 1 }} / {{ screens.length }}</span>
+						<button type="button" @click.stop="rotateScreen">翻下一张 <b>↗</b></button>
+					</div>
 				</div>
 			</section>
 			<div v-if="previewImage" class="image-preview-overlay" role="dialog" aria-modal="true"
@@ -426,7 +476,6 @@ const features = {
 				        @click="closeImagePreview">×</button>
 				<img :src="previewImage" alt="J2Agent product screenshot preview" @click.stop/>
 			</div>
-
 			<section id="architecture" class="architecture section-wrap">
 				<div class="arch-copy">
 					<div class="eyebrow">{{ copy.architectureEyebrow }}</div>
@@ -444,6 +493,12 @@ const features = {
 				</div>
 			</section>
 		</main>
+		<div v-if="diagramPreview" class="diagram-preview-overlay" role="dialog" aria-modal="true"
+		     aria-label="图表预览" @click.self="closeDiagramPreview">
+			<button class="image-preview-close" type="button" aria-label="关闭图表预览"
+			        @click="closeDiagramPreview">×</button>
+			<div class="diagram-preview-content" v-html="diagramPreview" @click.stop></div>
+		</div>
 		<section v-if="readerOpen" id="docs" class="reader-overlay" aria-label="J2Agent 文档中心">
 			<div class="reader-shell glass-panel">
 				<header class="reader-head">
@@ -484,7 +539,7 @@ const features = {
 				</div>
 			</div>
 		</section>
-		<footer><img src="/logo-b.svg" alt="J2Agent AI"/><span>{{ copy.footer }}</span><span class="footer-right">© 2026 J2Agent</span>
+		<footer><span class="footer-meta"><span>© 2026 jerryt92</span><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">滇ICP备2026015130号</a></span><span class="footer-brand"><img src="/logo-b.svg" alt="J2Agent AI"/><span>{{ copy.footer }}</span></span>
 		</footer>
 		<KbQaWidget @open-doc="openDocFromAi"/>
 		<transition name="toast">
