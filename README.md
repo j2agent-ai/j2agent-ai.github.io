@@ -15,8 +15,8 @@ npm run dev
 npm run build:dist
 ```
 
-构建产物输出到 `dist/`。推送到 `main` 或 `master` 后，`.github/workflows/deploy.yml` 会自动构建并部署到 GitHub Pages。
+构建产物输出到 `dist/`。推送到 `main` 或 `master` 后，`.github/workflows/deploy.yml` 会自动构建，并将构建产物发布到 GitHub 的 `dist` 分支。
 
 门户文档中心使用内置 Markdown 索引，正文通过 `raw.githubusercontent.com` 读取 `j2agent-ai/j2agent-docs`，不依赖 GitHub REST API，因此不会受到匿名 API 速率限制影响。
 
-首次启用时，在 GitHub 仓库的 Settings → Pages → Build and deployment 中将 Source 设置为 GitHub Actions。
+如果使用 GitHub Pages，在仓库 Settings → Pages → Build and deployment 中将 Source 设置为 `Deploy from a branch`，分支选择 `dist`，目录选择 `/ (root)`。

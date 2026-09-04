@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const toast = ref('')
 const activeFeature = ref('rag')
@@ -9,6 +9,7 @@ const docLoading = ref(false)
 const docError = ref('')
 const docs = ref([])
 const selectedDoc = ref('README.md')
+const docPath = ref('')
 const docHtml = ref('')
 
 const rawBase = 'https://raw.githubusercontent.com/j2agent-ai/j2agent-docs/main/'
@@ -39,15 +40,49 @@ const fallbackDocs = [
   ['前端/智能体多任务机制/README.md', '智能体多任务'],
   ['前端/md解析器/README.md', 'Markdown 解析器'],
   ['基础设施/docker部署/README.md', 'Docker 部署'],
+  ['dev/rule.md', '开发规则'],
+  ['基础设施/docker部署/构建与启动.md', '构建与启动'],
+  ['基础设施/docker部署/离线镜像打包.md', '离线镜像打包'],
+  ['基础设施/docker部署/目录与数据卷.md', '目录与数据卷'],
+  ['基础设施/docker部署/前端静态资源更新.md', '前端静态资源更新'],
+  ['平台/agent记忆机制/README.md', 'Agent 记忆机制'],
+  ['平台/安全与用户/README.md', '安全与用户'],
+  ['平台/安全与用户/邮箱注册机制.md', '邮箱注册机制'],
+  ['平台/聊天图片附件/README.md', '聊天图片附件'],
+  ['平台/通用助手/子智能体调用与记忆.md', '子智能体调用与记忆'],
+  ['平台/RAG机制/知识库同步.md', '知识库同步'],
+  ['平台/RAG机制/检索/README.md', '检索模块'],
+  ['平台/RAG机制/知识库维护/README.md', '知识库维护模块'],
+  ['平台/RAG机制/知识库维护/content_segment_chunk_test.md', '知识库分片测试'],
+  ['前端/md解析器/架构与流程.md', 'Markdown 架构与流程'],
+  ['前端/md解析器/图表渲染.md', '图表渲染'],
+  ['前端/md解析器/图表渲染性能优化.md', '图表渲染性能优化'],
+  ['前端/md解析器/围栏与会话切换架构.md', '围栏与会话切换'],
+  ['前端/md解析器/渲染机制与Worker隔离.md', 'Worker 隔离渲染'],
+  ['前端/md解析器/样式约定.md', 'Markdown 样式约定'],
+  ['原始需求规格/README.md', '原始需求规格'],
 ]
 const filteredDocs = computed(() => docs.value.filter((doc) => doc.title.toLowerCase().includes(docSearch.value.toLowerCase()) || doc.path.toLowerCase().includes(docSearch.value.toLowerCase())))
 
 const escapeHtml = (value) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
-const renderMarkdown = (source) => {
+const resolveDocAsset = (value, docPath) => {
+  if (/^(https?:|data:|\/)/.test(value)) return value
+  const folder = docPath.includes('/') ? docPath.slice(0, docPath.lastIndexOf('/') + 1) : ''
+  return rawBase + (folder + value.replace(/^\.\//, '')).split('/').map(encodeURIComponent).join('/')
+}
+const resolveDocLink = (value, docPath) => {
+  const clean = decodeURIComponent(value.split('#')[0].split('?')[0])
+  const folder = docPath.includes('/') ? docPath.slice(0, docPath.lastIndexOf('/') + 1) : ''
+  const parts = (folder + clean.replace(/^\.\//, '')).split('/')
+  const normalized = []
+  for (const part of parts) { if (!part || part === '.') continue; if (part === '..') normalized.pop(); else normalized.push(part) }
+  return normalized.join('/')
+}
+const renderMarkdown = (source, docPath) => {
   const lines = source.replaceAll('\r\n', '\n').split('\n')
   let html = '', inCode = false, code = [], list = false
   const closeList = () => { if (list) { html += '</ul>'; list = false } }
-  const inline = (text) => escapeHtml(text).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>')
+  const inline = (text) => escapeHtml(text).replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, url) => `<img class="md-image" src="${resolveDocAsset(url, docPath)}" alt="${alt}" loading="lazy" onclick="this.classList.toggle('zoomed')" />`).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => /\.md(?:[#?].*)?$/i.test(url) ? `<a href="#docs" data-doc-path="${escapeHtml(resolveDocLink(url, docPath))}">${label}</a>` : `<a href="${url}" target="_blank" rel="noreferrer">${label}</a>`)
   for (const line of lines) {
     if (line.startsWith('```')) { if (inCode) { html += `<pre><code>${escapeHtml(code.join('\n'))}</code></pre>`; code = [] } inCode = !inCode; continue }
     if (inCode) { code.push(line); continue }
@@ -62,12 +97,29 @@ const renderMarkdown = (source) => {
   return html
 }
 const loadDocIndex = () => { if (!docs.value.length) docs.value = fallbackDocs.map(([path, title]) => ({ path, title })) }
-const openReader = () => { readerOpen.value = true; loadDocIndex() }
 const loadDoc = async (path) => {
   selectedDoc.value = path; docLoading.value = true; docError.value = ''
-  try { const response = await fetch(rawBase + path.split('/').map(encodeURIComponent).join('/')); if (!response.ok) throw new Error('Document unavailable'); docHtml.value = renderMarkdown(await response.text()) } catch { docHtml.value = '<p>文档加载失败，请稍后重试，或直接打开 GitHub 文档仓库。</p>'; docError.value = '正文加载失败'; } finally { docLoading.value = false }
+  try { const response = await fetch(rawBase + path.split('/').map(encodeURIComponent).join('/')); if (!response.ok) throw new Error('Document unavailable'); docHtml.value = renderMarkdown(await response.text(), path) } catch { docHtml.value = '<p>文档加载失败，请稍后重试，或直接打开 GitHub 文档仓库。</p>'; docError.value = '正文加载失败'; } finally { docLoading.value = false }
 }
+const loadDocByPath = () => {
+  const path = docPath.value.trim().replace(/^\//, '')
+  if (!path) return
+  if (!path.toLowerCase().endsWith('.md')) { docError.value = '请输入以 .md 结尾的仓库文件路径'; return }
+  if (!docs.value.some((doc) => doc.path === path)) docs.value.unshift({ path, title: path.split('/').pop().replace(/\.md$/i, '') })
+  loadDoc(path)
+}
+const handleMarkdownClick = (event) => {
+  const link = event.target.closest?.('a[data-doc-path]')
+  if (!link) return
+  event.preventDefault()
+  loadDoc(link.dataset.docPath)
+}
+const openReader = () => { readerOpen.value = true; if (location.hash !== '#docs') history.pushState(null, '', '#docs'); loadDocIndex() }
+const closeReader = () => { readerOpen.value = false; if (location.hash === '#docs') history.pushState(null, '', '#top') }
+const syncReaderRoute = () => { readerOpen.value = location.hash === '#docs' }
 watch(readerOpen, (open) => { if (open) { loadDocIndex(); if (!docHtml.value) loadDoc(selectedDoc.value) } })
+onMounted(() => { syncReaderRoute(); window.addEventListener('hashchange', syncReaderRoute) })
+onBeforeUnmount(() => window.removeEventListener('hashchange', syncReaderRoute))
 const notify = (message) => {
   toast.value = message
   window.setTimeout(() => (toast.value = ''), 2400)
@@ -82,10 +134,10 @@ const features = {
 </script>
 
 <template>
-  <div class="site-shell">
+  <div class="site-shell" :class="{ 'docs-mode': readerOpen }">
     <header class="topbar glass-panel">
       <a href="#top" class="brand"><img src="/logo-b.svg" alt="J2Agent AI" /></a>
-      <nav><a href="#technology">技术能力</a><a href="#product">产品界面</a><a href="#architecture">平台架构</a><a href="#docs" @click.prevent="openReader">文档中心</a></nav>
+      <nav><a href="#docs" class="docs-link" @click.prevent="openReader">文档中心</a><a href="#technology">技术能力</a><a href="#product">产品界面</a><a href="#architecture">平台架构</a></nav>
       <a class="glass-button blue" href="https://j2agent.jerryt92.top/" target="_blank" rel="noreferrer">进入体验 <span>↗</span></a>
     </header>
 
@@ -103,8 +155,8 @@ const features = {
     </main>
     <section v-if="readerOpen" id="docs" class="reader-overlay" role="dialog" aria-modal="true" aria-label="J2Agent 文档中心">
       <div class="reader-shell glass-panel">
-        <header class="reader-head"><div><div class="eyebrow">J2AGENT DOCS · GITHUB</div><h2>文档中心</h2></div><div class="reader-actions"><a href="https://github.com/j2agent-ai/j2agent-docs" target="_blank" rel="noreferrer" class="repo-link">在 GitHub 查看 ↗</a><button class="close-reader" aria-label="关闭文档中心" @click="readerOpen = false">×</button></div></header>
-        <div class="reader-body"><aside class="doc-nav"><input v-model="docSearch" type="search" placeholder="搜索文档" aria-label="搜索文档" /><button v-for="doc in filteredDocs" :key="doc.path" :class="{ active: selectedDoc === doc.path }" @click="loadDoc(doc.path)"><span>{{ doc.path.includes('/') ? '·' : '⌂' }}</span>{{ doc.title }}</button><div v-if="!filteredDocs.length" class="doc-state">没有匹配的文档</div></aside><article class="markdown-view"><div v-if="docError" class="doc-notice">{{ docError }}</div><div v-if="docLoading" class="doc-state">正在加载正文…</div><div v-else v-html="docHtml"></div></article></div>
+        <header class="reader-head"><div><div class="eyebrow">J2AGENT DOCS · GITHUB</div><h2>文档中心</h2></div><div class="reader-actions"><a href="https://github.com/j2agent-ai/j2agent-docs" target="_blank" rel="noreferrer" class="repo-link">在 GitHub 查看 ↗</a><button class="close-reader" aria-label="关闭文档中心" @click="closeReader">×</button></div></header>
+        <div class="reader-body"><aside class="doc-nav"><input v-model="docSearch" type="search" placeholder="搜索已收录文档" aria-label="搜索已收录文档" /><div class="path-loader"><input v-model="docPath" type="text" placeholder="输入任意 .md 路径" aria-label="输入任意 Markdown 路径" @keyup.enter="loadDocByPath" /><button @click="loadDocByPath">打开</button></div><button v-for="doc in filteredDocs" :key="doc.path" :class="{ active: selectedDoc === doc.path }" @click="loadDoc(doc.path)"><span>{{ doc.path.includes('/') ? '·' : '⌂' }}</span>{{ doc.title }}</button><div v-if="!filteredDocs.length" class="doc-state">没有匹配的文档</div></aside><article class="markdown-view" @click="handleMarkdownClick"><div v-if="docError" class="doc-notice">{{ docError }}</div><div v-if="docLoading" class="doc-state">正在加载正文…</div><div v-else v-html="docHtml"></div></article></div>
       </div>
     </section>
     <footer><img src="/logo-b.svg" alt="J2Agent AI" /><span>智能体平台 · 让知识成为可执行的力量</span><span class="footer-right">© 2026 J2Agent</span></footer>
