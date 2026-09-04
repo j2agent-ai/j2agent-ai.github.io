@@ -14,7 +14,7 @@ const selectedDoc = ref('README.md')
 const docPath = ref('')
 const docHtml = ref('')
 
-const rawBase = 'https://raw.githubusercontent.com/j2agent-ai/j2agent-docs/main/'
+const rawBase = 'https://j2agent-ai.jerryt92.top/j2agent-docs/'
 const fallbackDocs = [
   ['README.md', '文档中心'],
   ['平台/RAG机制/README.md', 'RAG 机制'],
