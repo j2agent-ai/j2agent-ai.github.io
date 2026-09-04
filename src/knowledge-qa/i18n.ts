@@ -10,7 +10,7 @@ const zh = {
   placeholder: '输入你的问题…',
   send: '发送',
   stop: '停止',
-  welcome: '了解 J2Agent：一个把 Agent、工具、企业知识与可靠运行时连接起来的 AI 工作平台。',
+  welcome: '可以询问 J2Agent 智能体平台相关的各种问题。',
   connecting: '连接中',
   thinking: '思考中',
   answering: '正在回答',

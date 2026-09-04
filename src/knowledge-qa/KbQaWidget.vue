@@ -86,6 +86,9 @@ const stickToBottom = ref(true)
 const showScrollBottom = ref(false)
 let copiedTimer = 0
 const SCROLL_BOTTOM_THRESHOLD = 48
+let messagesContentResizeObserver: ResizeObserver | null = null
+let messagesContentMutationObserver: MutationObserver | null = null
+let contentScrollRafId = 0
 /** 输入框最大字数 */
 const INPUT_MAX_LENGTH = 200
 
@@ -109,6 +112,8 @@ type PendingAskAnswer = {
   userMessageIndex: number
 }
 const pendingAskAnswer = ref<PendingAskAnswer | null>(null)
+/** 当前回合仍在输出时点击「反馈给 AI」排队的诊断信息 */
+const pendingDiagramFeedback = ref<KbMessage | null>(null)
 
 const configReady = computed(
   () =>
@@ -235,6 +240,49 @@ function runMarkdownBlocks() {
   })
 }
 
+/** 内容直接改 DOM 或异步资源加载完成后，消息列表高度可能继续增长。 */
+function followMessagesContentChanges() {
+  if (contentScrollRafId) {
+    return
+  }
+  contentScrollRafId = requestAnimationFrame(() => {
+    contentScrollRafId = 0
+    if (stickToBottom.value) {
+      scrollMessagesToBottom('auto')
+    } else {
+      updateScrollBottomVisibility()
+    }
+  })
+}
+
+function observeMessagesContent() {
+  const root = messagesEl.value
+  if (!root) {
+    return
+  }
+  messagesContentResizeObserver?.disconnect()
+  messagesContentMutationObserver?.disconnect()
+
+  messagesContentResizeObserver = new ResizeObserver(() => {
+    followMessagesContentChanges()
+  })
+  // 观察列表而非固定高度的滚动容器，才能捕获内容高度增长。
+  const messageList = root.querySelector('.kb-qa-msg-list')
+  if (messageList) {
+    messagesContentResizeObserver.observe(messageList)
+  }
+
+  messagesContentMutationObserver = new MutationObserver(() => {
+    followMessagesContentChanges()
+  })
+  // 流式尾段使用 innerHTML 就地更新，不一定经过 Vue 的数据 watcher。
+  messagesContentMutationObserver.observe(root, {
+    childList: true,
+    characterData: true,
+    subtree: true
+  })
+}
+
 /** 防抖激活图表 / HTML 预览块 */
 function activateMarkdownBlocks() {
   if (markdownBlocksDebounceTimer !== null) {
@@ -329,6 +377,7 @@ watch(isBusy, (busy, wasBusy) => {
   }
   flushActivateMarkdownBlocks()
   void flushPendingAskQuestionAnswer()
+  void flushPendingDiagramFeedback()
 })
 
 /** 内容变化时仅处理滚动，不触发全量 markdown 重渲染 */
@@ -352,6 +401,7 @@ watch(
 )
 
 onMounted(() => {
+  nextTick(observeMessagesContent)
   window.visualViewport?.addEventListener('resize', syncKeyboardViewport)
   window.visualViewport?.addEventListener('scroll', syncKeyboardViewport)
   window.addEventListener('keydown', handleWidgetKeydown, true)
@@ -411,6 +461,12 @@ onBeforeUnmount(() => {
   if (markdownBlocksDebounceTimer !== null) {
     clearTimeout(markdownBlocksDebounceTimer)
     markdownBlocksDebounceTimer = null
+  }
+  messagesContentResizeObserver?.disconnect()
+  messagesContentMutationObserver?.disconnect()
+  if (contentScrollRafId) {
+    cancelAnimationFrame(contentScrollRafId)
+    contentScrollRafId = 0
   }
 })
 
@@ -692,6 +748,52 @@ async function handleSend() {
   inputEl.value?.focus()
 }
 
+async function sendDiagramFeedback(diagnostic: string) {
+  const content = `请帮我修复以下 Markdown 图表渲染错误：\n\n${diagnostic.trim()}`
+  if (!diagnostic.trim()) {
+    return
+  }
+  stickToBottom.value = true
+  if (isBusy.value || sending.value || connecting.value) {
+    const userMsg: KbMessage = {
+      index: messages.value.length,
+      role: 'user',
+      content
+    }
+    messages.value.push(userMsg)
+    pendingDiagramFeedback.value = userMsg
+    await nextTick()
+    scrollMessagesToBottom('smooth')
+    return
+  }
+  input.value = content
+  await handleSend()
+}
+
+async function flushPendingDiagramFeedback() {
+  const userMsg = pendingDiagramFeedback.value
+  if (!userMsg || isBusy.value || sending.value || connecting.value) {
+    return
+  }
+  pendingDiagramFeedback.value = null
+  const started = await startTurn(session, userMsg.content, language, {
+    existingUserMessage: userMsg
+  })
+  if (started) {
+    await nextTick()
+    scrollMessagesToBottom('smooth')
+  }
+}
+
+async function openAndAsk(question: string) {
+  if (!open.value) {
+    toggleOpen()
+    await nextTick()
+  }
+  input.value = question
+  await handleSend()
+}
+
 function handleStop() {
   stopTurn(session, language)
 }
@@ -762,6 +864,10 @@ function handleBubbleClick(event: MouseEvent) {
     const block = copyBtn.closest('.md-code-block')
     const pre = block?.querySelector('pre')
     const code = pre?.querySelector('code')?.textContent ?? pre?.textContent ?? ''
+    if (copyBtn.classList.contains('md-diagram-error-copy')) {
+      void sendDiagramFeedback(code)
+      return
+    }
     void copyMessage(code, -1)
     return
   }
@@ -814,6 +920,8 @@ function closeDiagramPreview() {
   diagramPreviewVisible.value = false
   diagramPreviewSvgs.value = []
 }
+
+defineExpose({ openAndAsk })
 </script>
 
 <template>
@@ -1707,21 +1815,21 @@ function closeDiagramPreview() {
   background-size: 180% 180%, 190% 190%, 220% 220%;
   background-position: 78% 18%, 15% 88%, 0% 50%;
   box-shadow:
-    0 8px 18px color-mix(in srgb, var(--n-color-primary) 16%, transparent),
+    0 10px 24px color-mix(in srgb, var(--n-color-primary) 28%, transparent),
     var(--n-shadow-elevation-1);
-  animation: kb-qa-orb-flow 8s ease-in-out infinite;
+  animation: kb-qa-orb-flow 4.8s ease-in-out infinite;
 }
 
 .kb-qa-welcome-orb::before {
   content: '';
   position: absolute;
   z-index: -1;
-  inset: -10px;
+  inset: -13px;
   border-radius: 22px;
-  background: linear-gradient(135deg, #72aaff66, #d78bf255 52%, #66d8e955);
-  filter: blur(10px);
-  opacity: .58;
-  animation: kb-qa-orb-halo 4.8s ease-in-out infinite;
+  background: linear-gradient(135deg, #72aaff99, #d78bf288 52%, #66d8e988);
+  filter: blur(13px);
+  opacity: .78;
+  animation: kb-qa-orb-halo 2.8s ease-in-out infinite;
 }
 
 @keyframes kb-qa-orb-flow {
@@ -1739,19 +1847,20 @@ function closeDiagramPreview() {
 @keyframes kb-qa-orb-halo {
   0%,
   100% {
-    opacity: .42;
+    opacity: .62;
     transform: scale(.9);
   }
   50% {
-    opacity: .76;
-    transform: scale(1.1);
+    opacity: 1;
+    transform: scale(1.14);
   }
 }
 
 .kb-qa-welcome-text {
-  margin: 0;
+  margin: 6px 0 0;
   color: var(--n-color-text-secondary);
-  font-size: 14px;
+  font-size: 16px;
+  font-weight: 700;
   line-height: 1.65;
   max-width: 28em;
 }
