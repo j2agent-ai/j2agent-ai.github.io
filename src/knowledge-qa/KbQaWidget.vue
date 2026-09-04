@@ -15,6 +15,7 @@ import {
 import 'element-plus/es/components/message/style/css'
 import 'element-plus/es/components/image-viewer/style/css'
 import 'element-plus/es/components/icon/style/css'
+import { ElImageViewer } from 'element-plus'
 import { formatSrcFileLabel, fetchQaTemplate, type KbHotQuestion } from './api'
 import { knowledgeQaConfig } from './config'
 import { kbQaText, type KbQaLang } from './i18n'
@@ -23,6 +24,8 @@ import KbAskQuestionCard from './components/KbAskQuestionCard.vue'
 import MdViewerOverlay, {
   type MdViewerSource
 } from './j2a/components/MdViewerOverlay.vue'
+import DiagramPreviewOverlay from './j2a/components/DiagramPreviewOverlay.vue'
+import { cloneSvgForPreview } from './j2a/utils/diagramPreview'
 import {
   isMarkdownFile,
   resolveMarkdownFileName
@@ -71,7 +74,6 @@ const messages = session.messages
 const isBusy = session.isBusy
 const connecting = session.connecting
 const sending = session.sending
-const agentState = session.agentState
 const errorMessage = session.errorMessage
 const messagesEl = ref<HTMLElement | null>(null)
 const inputEl = ref<HTMLTextAreaElement | null>(null)
@@ -90,6 +92,12 @@ const INPUT_MAX_LENGTH = 200
 const mdViewerVisible = ref(false)
 const mdViewerSources = ref<MdViewerSource[]>([])
 const mdViewerIndex = ref(0)
+const imagePreviewVisible = ref(false)
+const imagePreviewUrlList = ref<string[]>([])
+const imagePreviewIndex = ref(0)
+const diagramPreviewVisible = ref(false)
+const diagramPreviewSvgs = ref<SVGElement[]>([])
+const diagramPreviewIndex = ref(0)
 /** 欢迎区热门问题 */
 const hotQuestions = ref<KbHotQuestion[]>([])
 const visibleQuestions = ref<KbHotQuestion[]>([])
@@ -111,22 +119,7 @@ const configReady = computed(
 )
 
 const statusLabel = computed(() => {
-  if (connecting.value) {
-    return text.value.connecting
-  }
-  const state = agentState.value
-  if (state === 'STREAMING_TEXT') {
-    return text.value.answering
-  }
-  if (
-    state === 'THINKING' ||
-    state === 'CALLING_TOOL' ||
-    state === 'LOAD_SKILL' ||
-    state === 'AGENT_ORCHESTRATING'
-  ) {
-    return text.value.thinking
-  }
-  return ''
+  return isBusy.value ? text.value.thinking : ''
 })
 
 const canSend = computed(
@@ -361,7 +354,7 @@ watch(
 onMounted(() => {
   window.visualViewport?.addEventListener('resize', syncKeyboardViewport)
   window.visualViewport?.addEventListener('scroll', syncKeyboardViewport)
-  window.addEventListener('keydown', handleWidgetKeydown)
+  window.addEventListener('keydown', handleWidgetKeydown, true)
 })
 
 /** 拉取热门问题（对齐 j2a getQaTemplate） */
@@ -411,7 +404,7 @@ onBeforeUnmount(() => {
     stopTurn(session, language)
   window.visualViewport?.removeEventListener('resize', syncKeyboardViewport)
   window.visualViewport?.removeEventListener('scroll', syncKeyboardViewport)
-  window.removeEventListener('keydown', handleWidgetKeydown)
+  window.removeEventListener('keydown', handleWidgetKeydown, true)
   if (copiedTimer) {
     window.clearTimeout(copiedTimer)
   }
@@ -504,6 +497,26 @@ function handleInputFocus() {
 
 function handleWidgetKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape' && open.value) {
+    // 在 window 层直接消费第一次 Esc，确保只关闭最上层预览。
+    // 不等待预览组件的 document 监听，避免同一按键继续收起问答面板。
+    if (diagramPreviewVisible.value) {
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      closeDiagramPreview()
+      return
+    }
+    if (imagePreviewVisible.value) {
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      closeImagePreview()
+      return
+    }
+    if (mdViewerVisible.value) {
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      closeMdViewer()
+      return
+    }
     event.preventDefault()
     minimizePanel()
   }
@@ -750,7 +763,56 @@ function handleBubbleClick(event: MouseEvent) {
     const pre = block?.querySelector('pre')
     const code = pre?.querySelector('code')?.textContent ?? pre?.textContent ?? ''
     void copyMessage(code, -1)
+    return
   }
+
+  const messageContent = target.closest('.message-md, .kb-qa-bubble')
+  if (!messageContent) {
+    return
+  }
+
+  const image = target.closest('img')
+  if (image instanceof HTMLImageElement && image.src) {
+    event.preventDefault()
+    event.stopPropagation()
+    const images = [...messageContent.querySelectorAll('img')]
+      .filter((item): item is HTMLImageElement => item instanceof HTMLImageElement)
+      .map((item) => item.src)
+      .filter(Boolean)
+    imagePreviewUrlList.value = images
+    imagePreviewIndex.value = Math.max(0, images.indexOf(image.src))
+    diagramPreviewVisible.value = false
+    imagePreviewVisible.value = true
+    return
+  }
+
+  const body = target.closest('.md-diagram-body')
+  if (!body || body.closest('.md-diagram-error')) {
+    return
+  }
+  const svg = body.querySelector('svg')
+  if (!(svg instanceof SVGElement)) {
+    return
+  }
+  event.preventDefault()
+  event.stopPropagation()
+  const svgs = [...messageContent.querySelectorAll(
+    '.md-diagram:not(.md-diagram-error) .md-diagram-body svg'
+  )].filter((item): item is SVGElement => item instanceof SVGElement)
+  diagramPreviewSvgs.value = svgs.map((item) => cloneSvgForPreview(item))
+  diagramPreviewIndex.value = Math.max(0, svgs.indexOf(svg))
+  imagePreviewVisible.value = false
+  diagramPreviewVisible.value = true
+}
+
+function closeImagePreview() {
+  imagePreviewVisible.value = false
+  imagePreviewUrlList.value = []
+}
+
+function closeDiagramPreview() {
+  diagramPreviewVisible.value = false
+  diagramPreviewSvgs.value = []
 }
 </script>
 
@@ -760,14 +822,14 @@ function handleBubbleClick(event: MouseEvent) {
       class="kb-qa-root"
       :class="{ 'is-morphing': morphing }"
       :data-open="open"
-      :data-busy="isBusy || connecting"
+      :data-busy="isBusy"
     >
       <Transition name="kb-qa-fab">
         <button
           v-show="!open"
           type="button"
           class="kb-qa-fab"
-          :class="{ 'is-busy': isBusy || connecting }"
+          :class="{ 'is-busy': isBusy }"
           :aria-label="fabAriaLabel"
           :title="fabAriaLabel"
           @click="toggleOpen"
@@ -783,7 +845,7 @@ function handleBubbleClick(event: MouseEvent) {
 
       <Transition name="kb-qa-panel" @after-enter="onPanelAfterEnter" @after-leave="onPanelAfterLeave">
         <section
-          v-if="open"
+          v-show="open"
           class="kb-qa-panel"
           role="dialog"
           :aria-label="text.title"
@@ -1064,7 +1126,7 @@ function handleBubbleClick(event: MouseEvent) {
                 rows="2"
                 :maxlength="INPUT_MAX_LENGTH"
                 :placeholder="text.placeholder"
-                :disabled="!configReady || isBusy || sending"
+                :disabled="!configReady || sending"
                 @focus="handleInputFocus"
                 @keydown="onKeydown"
                 @compositionstart="onCompositionStart"
@@ -1113,6 +1175,19 @@ function handleBubbleClick(event: MouseEvent) {
       :initial-index="mdViewerIndex"
       @close="closeMdViewer"
     />
+    <ElImageViewer
+      v-if="imagePreviewVisible"
+      :url-list="imagePreviewUrlList"
+      :initial-index="imagePreviewIndex"
+      hide-on-click-modal
+      @close="closeImagePreview"
+    />
+    <DiagramPreviewOverlay
+      :visible="diagramPreviewVisible"
+      :diagrams="diagramPreviewSvgs"
+      :initial-index="diagramPreviewIndex"
+      @close="closeDiagramPreview"
+    />
   </Teleport>
 </template>
 
@@ -1135,7 +1210,7 @@ function handleBubbleClick(event: MouseEvent) {
   --n-color-neutral-w: var(--n-color-bg-elevated);
   --n-color-preview-bg: var(--n-color-bg-subtle);
   position: fixed;
-  /* 胶囊与展开面板共用同一右下锚点，避免形变时漂移 */
+  /* 胶囊与展开面板共用同一右下锚点 */
   right: max(48px, env(safe-area-inset-right, 0px));
   bottom: max(36px, env(safe-area-inset-bottom, 0px));
   z-index: var(--kb-qa-z);
@@ -1616,30 +1691,60 @@ function handleBubbleClick(event: MouseEvent) {
   padding: 28px 12px 20px;
   width: 100%;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .kb-qa-welcome-orb {
+  position: relative;
+  isolation: isolate;
   width: 48px;
   height: 48px;
   border-radius: 16px;
   background:
-    radial-gradient(
-      circle at 30% 30%,
-      color-mix(in srgb, var(--n-color-primary) 35%, white),
-      color-mix(in srgb, var(--n-color-primary) 12%, transparent) 70%
-    );
-  box-shadow: var(--n-shadow-elevation-1);
-  animation: kb-qa-orb-float 4.5s var(--kb-qa-ease) infinite;
+    radial-gradient(circle at 82% 74%, #ff82cfb8 0 8%, transparent 42%),
+    radial-gradient(circle at 22% 82%, #67d9f2aa 0 5%, transparent 38%),
+    linear-gradient(135deg, #659eff 0%, #8c8bff 34%, #d889e7 66%, #66d5e7 100%);
+  background-size: 180% 180%, 190% 190%, 220% 220%;
+  background-position: 78% 18%, 15% 88%, 0% 50%;
+  box-shadow:
+    0 8px 18px color-mix(in srgb, var(--n-color-primary) 16%, transparent),
+    var(--n-shadow-elevation-1);
+  animation: kb-qa-orb-flow 8s ease-in-out infinite;
 }
 
-@keyframes kb-qa-orb-float {
+.kb-qa-welcome-orb::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: -10px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, #72aaff66, #d78bf255 52%, #66d8e955);
+  filter: blur(10px);
+  opacity: .58;
+  animation: kb-qa-orb-halo 4.8s ease-in-out infinite;
+}
+
+@keyframes kb-qa-orb-flow {
   0%,
   100% {
-    transform: translateY(0);
+    background-position: 78% 18%, 15% 88%, 0% 50%;
+    transform: translateY(0) scale(1);
   }
   50% {
-    transform: translateY(-5px);
+    background-position: 22% 76%, 82% 22%, 100% 50%;
+    transform: translateY(-2px) scale(1.025);
+  }
+}
+
+@keyframes kb-qa-orb-halo {
+  0%,
+  100% {
+    opacity: .42;
+    transform: scale(.9);
+  }
+  50% {
+    opacity: .76;
+    transform: scale(1.1);
   }
 }
 

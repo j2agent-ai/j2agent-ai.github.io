@@ -17,8 +17,7 @@ type PendingTask = {
 
 const WORKER_RECYCLE_AFTER = 18
 const DEFAULT_CONCURRENCY = 2
-// Worker 失去响应时必须尽快交给主线程兜底，不能让 Markdown 永久停在“渲染中”。
-const WORKER_REQUEST_TIMEOUT_MS = 15_000
+const WORKER_REQUEST_TIMEOUT_MS = 12_000
 const WORKER_WARMUP_TIMEOUT_MS = 30_000
 
 let worker: Worker | undefined
@@ -99,7 +98,6 @@ const scheduleTaskTimeout = (task: PendingTask) => {
     if (!pendingById.has(task.id)) {
       return
     }
-    // 不直接 reject：主线程 fallback 能在 Worker 卡死/加载失败时继续完成渲染。
     void finishTaskWithFallback(task, 'Diagram worker render timeout').finally(() => {
       inFlightCount = Math.max(0, inFlightCount - 1)
       requestWorkerRecycle()

@@ -11,7 +11,6 @@ import type {
   KbChatRequest,
   KbMessage
 } from './types'
-import { BUSY_AGENT_STATES } from './types'
 
 export type KbQaSession = {
   contextId: Ref<string | undefined>
@@ -84,33 +83,15 @@ function forceSessionIdle(session: KbQaSession) {
   session.connecting.value = false
 }
 
-function isBusyState(state: AgentState | null): boolean {
-  return state != null && (BUSY_AGENT_STATES as AgentState[]).includes(state)
-}
-
 function isTerminal(state: AgentState | null): boolean {
   return state === 'COMPLETED' || state === 'FAILED' || state === 'CANCELLED'
 }
 
-/** WebSocket 是否仍处于握手中或已连接 */
-function isWsLive(): boolean {
-  return (
-    activeWs != null &&
-    (activeWs.readyState === WebSocket.OPEN ||
-      activeWs.readyState === WebSocket.CONNECTING)
-  )
-}
-
 /**
- * 同步轮次忙碌态：Agent 非终态 busy，或 WS 仍存活（对齐 j2a，避免 phase=COMPLETE 误放行）。
+ * 同步轮次忙碌态：只要当前状态不是终态，就保持 busy。
  */
 function syncTurnBusy(session: KbQaSession) {
-  if (isTerminal(session.agentState.value)) {
-    session.isBusy.value = false
-    return
-  }
-  session.isBusy.value =
-    isBusyState(session.agentState.value) || isWsLive()
+  session.isBusy.value = !isTerminal(session.agentState.value)
 }
 
 /** 最后一条 user 消息的下标 */

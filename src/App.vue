@@ -1,15 +1,13 @@
 <script setup>
 import {computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch} from 'vue'
-import {
-	renderMarkdown,
-	renderMarkdownBlocks,
-	cancelPendingMarkdownRenderWork,
-	getMarkdownCodeBlockText,
-	preloadDiagramRuntimes
-} from './knowledge-qa/j2a/utils/markdownRenderer'
+import {createPortalDiagramRenderer, createPortalMarkdownRenderer} from './portalMarkdown'
+import {createPortalDocumentStore} from './portalDocuments'
+import DiagramPreviewOverlay from './knowledge-qa/j2a/components/DiagramPreviewOverlay.vue'
+import {cloneSvgForPreview} from './knowledge-qa/j2a/utils/diagramPreview'
 import './knowledge-qa/j2a/styles/markdown.scss'
 
 const KbQaWidget = defineAsyncComponent(() => import('./knowledge-qa/KbQaWidget.vue'))
+import GlobalTopbar from './GlobalTopbar.vue'
 
 const copy = {
 	docs: '文档中心',
@@ -42,8 +40,6 @@ const copy = {
 	noMatch: '没有匹配的文档',
 	loading: '正在加载正文…',
 	searchDocs: '搜索已收录文档',
-	path: '输入任意 .md 路径',
-	open: '打开',
 	close: '关闭文档',
 	github: '在 GitHub 查看',
 	docsTitle: '文档中心'
@@ -65,10 +61,12 @@ const getDocPathFromUrl = () => {
 	}
 }
 const selectedDoc = ref(getDocPathFromUrl() || 'README.md')
-const docPath = ref('')
 const docHtml = ref('')
 const docContentRef = ref(null)
 const previewImage = ref('')
+const diagramPreviewSvgs = ref([])
+const diagramPreviewIndex = ref(0)
+const mobileDocsNavOpen = ref(false)
 
 const rawBase = 'https://j2agent-ai.jerryt92.top/j2agent-docs/'
 const fallbackDocs = [
@@ -122,6 +120,13 @@ const fallbackDocs = [
 ]
 const filteredDocs = computed(() => docs.value.filter((doc) => doc.title.toLowerCase().includes(docSearch.value.toLowerCase()) || doc.path.toLowerCase().includes(docSearch.value.toLowerCase())))
 const collapsedDirs = ref(new Set())
+const selectedDocTitle = computed(() =>
+	docs.value.find((doc) => doc.path === selectedDoc.value)?.title ||
+	selectedDoc.value.split('/').pop()?.replace(/\.md$/i, '') ||
+	'当前文档'
+)
+const isMobileDocsViewport = () =>
+	typeof window !== 'undefined' && window.matchMedia('(max-width: 600px)').matches
 const treeRows = computed(() => {
 	const query = docSearch.value.trim().toLowerCase()
 	if (query) {
@@ -153,7 +158,9 @@ const treeRows = computed(() => {
 	const rows = []
 	const walk = (node, depth) => {
 		for (const dir of node.dirs) {
-			const expanded = !collapsedDirs.value.has(dir.path)
+			const isCurrentBranch = selectedDoc.value.startsWith(`${dir.path}/`)
+			const expanded = !collapsedDirs.value.has(dir.path) &&
+				(!isMobileDocsViewport() || isCurrentBranch)
 			rows.push({type: 'dir', name: dir.name, path: dir.path, depth, expanded})
 			if (expanded) walk(dir, depth + 1)
 		}
@@ -170,40 +177,13 @@ const toggleDocDir = (path) => {
 	collapsedDirs.value = next
 }
 
-const escapeHtml = (value) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
-const resolveDocAsset = (value, docPath) => {
-	if (/^(https?:|data:|\/)/.test(value)) return value
-	const folder = docPath.includes('/') ? docPath.slice(0, docPath.lastIndexOf('/') + 1) : ''
-	return rawBase + (folder + value.replace(/^\.\//, '')).split('/').map(encodeURIComponent).join('/')
-}
-const resolveDocLink = (value, docPath) => {
-	const clean = decodeURIComponent(value.split('#')[0].split('?')[0])
-	const folder = docPath.includes('/') ? docPath.slice(0, docPath.lastIndexOf('/') + 1) : ''
-	const parts = (folder + clean.replace(/^\.\//, '')).split('/')
-	const normalized = []
-	for (const part of parts) {
-		if (!part || part === '.') continue;
-		if (part === '..') normalized.pop(); else normalized.push(part)
-	}
-	return normalized.join('/')
-}
-const prepareDocMarkdown = (source, docPath) => source.replace(
-	/!\[([^\]]*)\]\(([^)]+)\)/g,
-	(match, alt, url) => `![${alt}](${resolveDocAsset(url.trim(), docPath)})`
-)
-
-const renderDocMarkdown = (source, docPath) => {
-	let html = renderMarkdown(prepareDocMarkdown(source, docPath))
-	// 保留文档中心的站内 Markdown 跳转行为；普通外链仍由 markdownRenderer 处理。
-	html = html.replace(/href="([^\"]+\.md(?:#[^\"]*)?)"/gi, (_, url) =>
-		`href="#docs" data-doc-path="${escapeHtml(resolveDocLink(url, docPath))}"`
-	)
-	return html
-}
+const renderDocMarkdown = createPortalMarkdownRenderer({baseUrl: rawBase})
+const portalDiagramRenderer = createPortalDiagramRenderer()
+const documentStore = createPortalDocumentStore({baseUrl: rawBase, index: fallbackDocs})
 const copyMarkdownBlock = async (button) => {
 	const block = button.closest('.md-code-block')
 	if (!block) return
-	const content = getMarkdownCodeBlockText(block).trimEnd()
+	const content = block.querySelector('pre')?.textContent?.trimEnd() || ''
 	if (!content) return
 	try {
 		if (navigator.clipboard?.writeText) {
@@ -224,48 +204,31 @@ const copyMarkdownBlock = async (button) => {
 	}
 }
 const loadDocIndex = () => {
-	if (!docs.value.length) docs.value = fallbackDocs.map(([path, title]) => ({path, title}))
+	if (!docs.value.length) docs.value = documentStore.list()
 }
 const loadDoc = async (path) => {
+	portalDiagramRenderer.cancel()
 	selectedDoc.value = path;
+	if (isMobileDocsViewport()) mobileDocsNavOpen.value = false
 	if (location.hash.split('?')[0] === '#docs') {
 		history.replaceState(null, '', `#docs?path=${encodeURIComponent(path)}`)
 	}
 	docLoading.value = true;
 	docError.value = ''
 	try {
-		const response = await fetch(rawBase + path.split('/').map(encodeURIComponent).join('/'));
-		if (!response.ok) throw new Error('Document unavailable');
-		docHtml.value = renderDocMarkdown(await response.text(), path)
+		docHtml.value = renderDocMarkdown(await documentStore.load(path), path)
+		docLoading.value = false
 		await nextTick()
 		if (docContentRef.value) {
-			await renderMarkdownBlocks(docContentRef.value, {
-				scrollRoot: docContentRef.value.parentElement,
-				concurrency: 4,
-				backgroundConcurrency: 2,
-				lazy: true,
-				prefetchRootMargin: '1600px 0px'
-			})
+			void portalDiagramRenderer.render(docContentRef.value)
 		}
-	} catch {
+	} catch (error) {
+		if (error?.name === 'AbortError') return
 		docHtml.value = '<p>文档加载失败，请稍后重试，或直接打开 GitHub 文档仓库。</p>';
 		docError.value = '正文加载失败';
 	} finally {
 		docLoading.value = false
 	}
-}
-const loadDocByPath = () => {
-	const path = docPath.value.trim().replace(/^\//, '')
-	if (!path) return
-	if (!path.toLowerCase().endsWith('.md')) {
-		docError.value = '请输入以 .md 结尾的仓库文件路径';
-		return
-	}
-	if (!docs.value.some((doc) => doc.path === path)) docs.value.unshift({
-		path,
-		title: path.split('/').pop().replace(/\.md$/i, '')
-	})
-	loadDoc(path)
 }
 const handleMarkdownClick = (event) => {
 	const clicked = event.target instanceof Element ? event.target : null
@@ -273,6 +236,12 @@ const handleMarkdownClick = (event) => {
 	if (target) {
 		event.preventDefault()
 		void copyMarkdownBlock(target)
+		return
+	}
+	const diagram = clicked?.closest('.md-diagram')
+	if (diagram && diagram.querySelector('svg')) {
+		event.preventDefault()
+		openDiagramPreview(diagram)
 		return
 	}
 	const link = clicked?.closest('a[data-doc-path]')
@@ -298,9 +267,13 @@ const openDocFromAi = (path) => {
 	loadDoc(path)
 }
 const syncReaderRoute = () => {
-	readerOpen.value = location.hash.split('?')[0] === '#docs'
+	const shouldOpen = location.hash.split('?')[0] === '#docs'
+	readerOpen.value = shouldOpen
 	const path = getDocPathFromUrl()
-	if (path) selectedDoc.value = path
+	if (path && path !== selectedDoc.value) {
+		selectedDoc.value = path
+		if (shouldOpen) void loadDoc(path)
+	}
 }
 watch(readerOpen, (open) => {
 	if (open) {
@@ -310,14 +283,14 @@ watch(readerOpen, (open) => {
 })
 onMounted(() => {
 	syncReaderRoute();
-	preloadDiagramRuntimes()
 	window.addEventListener('hashchange', syncReaderRoute)
 	window.addEventListener('keydown', handleGlobalKeydown)
 })
 onBeforeUnmount(() => {
 	window.removeEventListener('hashchange', syncReaderRoute)
 	window.removeEventListener('keydown', handleGlobalKeydown)
-	cancelPendingMarkdownRenderWork(docContentRef.value)
+	documentStore.cancel()
+	portalDiagramRenderer.cancel()
 })
 const notify = (message) => {
 	toast.value = message
@@ -329,14 +302,26 @@ const openImagePreview = (event) => {
 	if (image) previewImage.value = image.currentSrc || image.src
 }
 const closeImagePreview = () => { previewImage.value = '' }
-const handleGlobalKeydown = (event) => { if (event.key === 'Escape') closeImagePreview() }
+const openDiagramPreview = (diagram) => {
+const svg = diagram.querySelector('svg')
+	if (!svg) return
+	const diagrams = [...document.querySelectorAll('.markdown-view .md-diagram:not(.md-diagram-error) .md-diagram-body svg')]
+	diagramPreviewSvgs.value = diagrams.map((item) => cloneSvgForPreview(item))
+	diagramPreviewIndex.value = Math.max(0, diagrams.indexOf(svg))
+}
+const closeDiagramPreview = () => { diagramPreviewSvgs.value = [] }
+const handleGlobalKeydown = (event) => {
+	if (event.key === 'Escape') {
+		closeImagePreview()
+	}
+}
 
 const features = {
 	rag: {
 		label: 'RAG 检索增强',
 		title: '让答案有据可依',
 		body: '从文档入库、切片、向量化到召回与来源展示，构成一条完整的知识增强链路。',
-		chips: ['稠密向量', 'BM25 稀疏检索', 'Milvus 融合排序']
+		chips: ['稠密向量', 'BM25 稀疏检索', '融合排序']
 	},
 	agent: {
 		label: 'Agent 编排',
@@ -355,16 +340,9 @@ const features = {
 
 <template>
 	<div class="site-shell" :class="{ 'docs-mode': readerOpen }">
-		<header class="topbar glass-panel">
-			<a href="#top" class="brand"><img src="/logo-b.svg" alt="J2Agent AI"/></a>
-			<nav><a href="#technology">{{ copy.technology }}</a><a href="#product">{{ copy.product }}</a><a
-				href="#architecture">{{ copy.architecture }}</a></nav>
-			<div class="topbar-actions">
-				<button class="glass-button blue docs-entry" type="button" @click="openReader"><svg class="document-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6.5 3.75h7.1L18 8.2v12.05H6.5zM13.5 3.75V8.2H18M9 12h6M9 15.5h6"/></svg><span>{{ copy.docs }}</span><span aria-hidden="true">↗</span></button>
-			</div>
-		</header>
+		<GlobalTopbar @open-doc="openReader" />
 
-		<main id="top">
+		<main>
 			<section class="hero section-wrap">
 				<div class="hero-copy">
 					<div class="eyebrow"><i></i> {{ copy.heroEyebrow }}</div>
@@ -406,14 +384,17 @@ const features = {
 				<div class="tech-layout">
 					<div class="tech-tabs">
 						<button v-for="(feature, key) in features" :key="key" :class="{ selected: activeFeature === key }"
-						        @click="activeFeature = key"><span>0{{
-								Object.keys(features).indexOf(key) + 1
-							}}</span><strong>{{ feature.label }}</strong><b>↗</b></button>
+						        @click="activeFeature = key"><i class="tech-tab-icon" aria-hidden="true">
+								<svg v-if="key === 'rag'" viewBox="0 0 24 24" fill="none"><path d="M4 6.5C4 5.12 7.58 4 12 4s8 1.12 8 2.5S16.42 9 12 9 4 7.88 4 6.5Z" stroke="currentColor" stroke-width="1.8"/><path d="M4 6.5v5C4 12.88 7.58 14 12 14c.9 0 1.76-.05 2.55-.15M4 11.5v5C4 17.88 7.58 19 12 19c.91 0 1.77-.05 2.56-.15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="m16.5 15.5 3.5-3.5m0 0v3m0-3h-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+								<svg v-else-if="key === 'agent'" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="5" r="2.5" stroke="currentColor" stroke-width="1.8"/><circle cx="5.5" cy="18" r="2.5" stroke="currentColor" stroke-width="1.8"/><circle cx="18.5" cy="18" r="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M10.9 7.2 6.6 15.8m6.5-8.6 4.3 8.6M8 18h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+								<svg v-else viewBox="0 0 24 24" fill="none"><path d="M3 12h4l2-5 4 10 2-5h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.4" opacity=".35"/></svg>
+							</i><strong>{{ feature.label }}</strong><b>↗</b></button>
 					</div>
 					<div class="tech-detail glass-panel">
 						<div class="detail-kicker">{{ features[activeFeature].label }}</div>
 						<h3>{{ features[activeFeature].title }}</h3>
-						<p>{{ features[activeFeature].body }}</p>
+						<p v-if="activeFeature === 'rag'">以 <a class="tech-link milvus-link" href="https://milvus.io" target="_blank" rel="noopener noreferrer"><img src="/milvus-logo.svg" alt="Milvus"/></a> 为向量检索底座，承载企业知识的高效存储与近似最近邻搜索；结合 BM25 稀疏检索与融合排序，在检索速度、规模和召回质量之间取得平衡。</p>
+						<p v-else>{{ features[activeFeature].body }}</p>
 						<div class="chip-row"><span v-for="chip in features[activeFeature].chips" :key="chip">{{ chip }}</span></div>
 						<div class="detail-diagram">
 							<div class="diagram-node">输入</div>
@@ -436,8 +417,7 @@ const features = {
 						<h2>{{ copy.productTitle[0] }}<br/><span>{{ copy.productTitle[1] }}</span></h2></div>
 					<p>{{ copy.productBody }}</p></div>
 				<div class="screen-grid" @click="openImagePreview">
-					<figure class="screen-card wide"><img src="/screens/02-chat-analysis.png"
-					                                      alt="J2Agent 通用 AI 助手与分析结果界面"/>
+					<figure class="screen-card wide"><img src="/screens/02-chat-analysis.png" alt="J2Agent 通用 AI 助手与分析结果界面"/>
 						<figcaption><strong>通用 AI 助手</strong><span>调用工具，流式输出分析结果</span></figcaption>
 					</figure>
 					<figure class="screen-card"><img src="/screens/01-task-list.png" alt="J2Agent 智能体任务列表界面"/>
@@ -466,7 +446,6 @@ const features = {
 				        @click="closeImagePreview">×</button>
 				<img :src="previewImage" alt="J2Agent product screenshot preview" @click.stop/>
 			</div>
-
 			<section id="architecture" class="architecture section-wrap">
 				<div class="arch-copy">
 					<div class="eyebrow">{{ copy.architectureEyebrow }}</div>
@@ -484,6 +463,12 @@ const features = {
 				</div>
 			</section>
 		</main>
+		<DiagramPreviewOverlay
+			:visible="diagramPreviewSvgs.length > 0"
+			:diagrams="diagramPreviewSvgs"
+			:initial-index="diagramPreviewIndex"
+			@close="closeDiagramPreview"
+		/>
 		<section v-if="readerOpen" id="docs" class="reader-overlay" aria-label="J2Agent 文档中心">
 			<div class="reader-shell glass-panel">
 				<header class="reader-head">
@@ -494,12 +479,16 @@ const features = {
 					                               class="repo-link"><svg class="github-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .7a11.3 11.3 0 0 0-3.57 22.02c.57.1.78-.25.78-.55v-2.1c-3.18.7-3.85-1.35-3.85-1.35-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.25 3.33.96.1-.74.4-1.25.73-1.54-2.54-.29-5.2-1.27-5.2-5.66 0-1.25.45-2.27 1.18-3.07-.12-.29-.51-1.45.11-3.03 0 0 .96-.31 3.12 1.17a10.8 10.8 0 0 1 5.68 0c2.16-1.48 3.12-1.17 3.12-1.17.62 1.58.23 2.74.11 3.03.73.8 1.18 1.82 1.18 3.07 0 4.4-2.67 5.36-5.22 5.64.41.36.78 1.08.78 2.18v3.23c0 .3.2.66.79.55A11.3 11.3 0 0 0 12 .7Z"/></svg><span>{{ copy.github }}</span><span aria-hidden="true">↗</span></a></div>
 				</header>
 				<div class="reader-body">
-					<aside class="doc-nav"><input v-model="docSearch" type="search" :placeholder="copy.searchDocs"
+					<div class="mobile-doc-toolbar">
+						<button type="button" class="mobile-doc-nav-toggle" :aria-expanded="mobileDocsNavOpen"
+						        @click="mobileDocsNavOpen = !mobileDocsNavOpen">
+							<span class="mobile-doc-nav-label">目录</span>
+							<span class="mobile-doc-current" :title="selectedDoc">{{ selectedDocTitle }}</span>
+							<span class="mobile-doc-nav-chevron">{{ mobileDocsNavOpen ? '⌃' : '⌄' }}</span>
+						</button>
+					</div>
+					<aside class="doc-nav" :class="{ 'mobile-doc-nav-open': mobileDocsNavOpen }"><input v-model="docSearch" type="search" :placeholder="copy.searchDocs"
 					                              :aria-label="copy.searchDocs"/>
-						<div class="path-loader"><input v-model="docPath" type="text" :placeholder="copy.path"
-						                                aria-label="输入任意 Markdown 路径" @keyup.enter="loadDocByPath"/>
-							<button @click="loadDocByPath">{{ copy.open }}</button>
-						</div>
 						<template v-for="row in treeRows" :key="`${row.type}:${row.path}`">
 							<button v-if="row.type === 'dir'" class="doc-tree-row doc-tree-dir" :style="{ '--tree-depth': row.depth }"
 							        :aria-expanded="row.expanded" @click="toggleDocDir(row.path)"><span class="doc-tree-chevron">{{ row.expanded ? '⌄' : '›' }}</span>{{ row.name }}</button>
@@ -516,7 +505,7 @@ const features = {
 				</div>
 			</div>
 		</section>
-		<footer><img src="/logo-b.svg" alt="J2Agent AI"/><span>{{ copy.footer }}</span><span class="footer-right">© 2026 J2Agent</span>
+		<footer><span class="footer-brand"><img src="/logo-b.svg" alt="J2Agent AI"/><span>{{ copy.footer }}</span></span><span class="footer-meta"><span>© 2026 jerryt92</span><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">滇ICP备2026015130号</a></span>
 		</footer>
 		<KbQaWidget @open-doc="openDocFromAi"/>
 		<transition name="toast">
