@@ -9,7 +9,7 @@ const zh = {
   placeholder: '输入你的问题…',
   send: '发送',
   stop: '停止',
-  welcome: '可以询问 jerryt92 的项目相关的各种问题',
+  welcome: '了解 J2Agent：一个把 Agent、工具、企业知识与可靠运行时连接起来的 AI 工作平台。',
   connecting: '连接中',
   thinking: '思考中',
   answering: '正在回答',
@@ -24,6 +24,11 @@ const zh = {
   thinkingTitle: '深度思考',
   hotQuestions: '热门问题',
   refreshHotQuestions: '换一批',
+  examples: [
+    'J2Agent 的整体架构是怎样的？',
+    'RAG 融合检索如何工作？',
+    '如何开发一个 J2Agent Agent？'
+  ],
   askCustomPlaceholder: '或输入自定义回答…',
   askSend: '提交回答',
   askEmpty: '请输入回答内容'
@@ -37,7 +42,7 @@ const en: typeof zh = {
   placeholder: 'Ask a question…',
   send: 'Send',
   stop: 'Stop',
-  welcome: 'Ask anything about jerryt92 projects',
+  welcome: 'Explore J2Agent, an AI work platform connecting agents, tools, enterprise knowledge, and a reliable runtime.',
   connecting: 'Connecting',
   thinking: 'Thinking',
   answering: 'Answering',
@@ -51,6 +56,11 @@ const en: typeof zh = {
   thinkingTitle: 'Deep thinking',
   hotQuestions: 'Popular questions',
   refreshHotQuestions: 'Refresh',
+  examples: [
+    'How is the J2Agent platform structured?',
+    'How does hybrid RAG retrieval work?',
+    'How do I build a J2Agent agent?'
+  ],
   askCustomPlaceholder: 'Or type a custom answer…',
   askSend: 'Submit answer',
   askEmpty: 'Please enter an answer'

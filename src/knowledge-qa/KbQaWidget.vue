@@ -162,6 +162,13 @@ const assistantRenderedSegments = computed(() =>
   )
 )
 
+const exampleQuestions = computed(() => {
+  if (hotQuestions.value.length) {
+    return hotQuestions.value
+  }
+  return text.value.examples.map((question) => ({ question }))
+})
+
 /** 当前流式尾段原文 */
 const activeAssistantTailText = computed(() =>
   getActiveAssistantTailText(
@@ -364,6 +371,15 @@ watch(
 onMounted(() => {
   setJ2aLocale(props.language)
 })
+
+watch(
+  () => props.language,
+  (lang) => {
+    setJ2aLocale(lang)
+    hotQuestions.value = []
+    void loadHotQuestions()
+  }
+)
 
 /** 拉取热门问题（对齐 j2a getQaTemplate） */
 async function loadHotQuestions() {
@@ -807,7 +823,7 @@ function handleBubbleClick(event: MouseEvent) {
                   {{ text.emptyConfig }}
                 </p>
                 <div
-                  v-else-if="hotQuestions.length"
+                  v-else
                   class="kb-qa-hot-questions"
                 >
                   <div class="kb-qa-hot-head">
@@ -822,7 +838,7 @@ function handleBubbleClick(event: MouseEvent) {
                     </button>
                   </div>
                   <button
-                    v-for="(item, index) in hotQuestions"
+                    v-for="(item, index) in exampleQuestions"
                     :key="`${item.question}-${index}`"
                     type="button"
                     class="kb-qa-hot-item"
