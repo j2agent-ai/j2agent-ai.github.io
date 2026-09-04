@@ -479,11 +479,11 @@ const escapeHtml = (value: string) => md.utils.escapeHtml(value)
 const normalizeFenceLanguage = (info?: string) =>
   (info || '').trim().split(/\s+/)[0]?.toLowerCase() || ''
 
-/** 异步块占位：spinner + 生成中 + 跳动省略号 */
+/** 异步块占位：spinner + 渲染中 + 跳动省略号 */
 const renderGeneratingHintHtml = () =>
   [
     '<span class="md-block-generating" role="status" aria-live="polite">',
-    '<span class="md-block-generating-text">生成中</span>',
+    '<span class="md-block-generating-text">渲染中</span>',
     '<span class="md-block-generating-dots" aria-hidden="true">',
     '<span>.</span><span>.</span><span>.</span>',
     '</span>',
@@ -628,21 +628,6 @@ md.renderer.rules.link_open = function(tokens, idx, options, env, self) {
   tokens[idx].attrPush(['target', '_blank'])
   tokens[idx].attrPush(['rel', 'noopener noreferrer'])
   return self.renderToken(tokens, idx, options)
-}
-
-/** 图片默认懒加载，减轻流式输出时主线程解码压力 */
-const defaultImageRule = md.renderer.rules.image?.bind(md.renderer.rules)
-if (defaultImageRule) {
-  md.renderer.rules.image = (tokens, idx, options, env, self) => {
-    const token = tokens[idx]
-    if (token.attrIndex('loading') < 0) {
-      token.attrPush(['loading', 'lazy'])
-    }
-    if (token.attrIndex('decoding') < 0) {
-      token.attrPush(['decoding', 'async'])
-    }
-    return defaultImageRule(tokens, idx, options, env, self)
-  }
 }
 
 md.renderer.rules.table_open = function() {
@@ -1861,7 +1846,7 @@ const expandXychartViewBoxForWrappedLabels = (svg: SVGElement) => {
   let maxExtent = minY + height
 
   try {
-    const fullBox = (svg as SVGSVGElement).getBBox()
+    const fullBox = svg.getBBox()
     maxExtent = Math.max(
       maxExtent,
       fullBox.y + fullBox.height + XYCHART_WRAPPED_LABEL_BOTTOM_PAD
@@ -2003,10 +1988,7 @@ const isRetryableRenderError = (error: unknown, signal: AbortSignal) => {
     return true
   }
   if (error instanceof DiagramRenderWorkerError) {
-    return (
-      error.message === 'Diagram block detached' ||
-      error.message === 'Diagram worker render timeout'
-    )
+    return error.message === 'Diagram block detached'
   }
   return false
 }

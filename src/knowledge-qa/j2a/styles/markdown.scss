@@ -1,4 +1,22 @@
 .message-md {
+  /* Markdown 独立使用时也具备完整主题变量，避免依赖聊天页上下文导致颜色失效。 */
+  --el-color-primary: #5186e6;
+  --n-color-text-primary: #263449;
+  --n-color-text-secondary: #52657f;
+  --n-color-text-tertiary: #6f8098;
+  --n-color-link: #356fcf;
+  --n-inline-code-bg: #edf3fc;
+  --n-inline-code-border: #c9d9ef;
+  --n-inline-code-text: #285da8;
+  --n-glass-border-1: #dbe4ef;
+  --n-glass-border-2: #cbd8e8;
+  --n-topbar-text: #f8fbff;
+  --n-dark-panel-tint: #1e2c3d;
+  --n-dark-panel-border: #3c516b;
+  --n-dark-panel-shadow: 0 8px 22px rgba(28, 48, 74, 0.16);
+  --n-dark-panel-text: #f4f7fb;
+  --n-dark-panel-blur: 0px;
+  --n-dark-panel-saturate: 100%;
   --md-diagram-max-height: min(360px, 42vh);
   /* 气泡内 HTML 预览缩略图：完整内容等比适配并撑满该高度 */
   --md-html-preview-max-height: min(300px, 40vh);
@@ -625,7 +643,7 @@
     animation-delay: 0.3s;
   }
 
-  /* 生成中：shimmer 背景 + 中央 loading 提示 */
+  /* 渲染中：shimmer 背景 + 中央 loading 提示 */
   .md-html-preview-wrap.md-block-pending {
     height: var(--md-html-preview-max-height);
     min-height: var(--md-html-preview-max-height);
