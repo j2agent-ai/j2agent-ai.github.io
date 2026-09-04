@@ -78,10 +78,10 @@ const runtimeDemo = {
 	body: '已从车次、票价、历时与余票等维度完成分析。'
 }
 const runtimeMetrics = [
-	{ icon: '🚄', label: '推荐车次', value: 'G1016' },
-	{ icon: '¥', label: '二等座', value: '¥538' },
-	{ icon: '◷', label: '运行历时', value: '4时12分' },
-	{ icon: '✓', label: '余票状态', value: '充足' }
+	{ icon: '🚄', label: '推荐车次', value: 'G381' },
+	{ icon: '💴', label: '二等座', value: '¥627.5' },
+	{ icon: '⏰', label: '运行时刻', value: '13:59 → 17:50' },
+	{ icon: '✅', label: '余票状态', value: '充足' }
 ]
 const runtimeResponseVisible = ref(false)
 const runtimeSending = ref(false)
