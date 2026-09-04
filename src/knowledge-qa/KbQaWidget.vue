@@ -20,7 +20,6 @@ import { knowledgeQaConfig } from './config'
 import { kbQaText, type KbQaLang } from './i18n'
 import KbAgentThinkingBlock from './components/KbAgentThinkingBlock.vue'
 import KbAskQuestionCard from './components/KbAskQuestionCard.vue'
-import { setJ2aLocale } from './j2a/shims/lib'
 import MdViewerOverlay, {
   type MdViewerSource
 } from './j2a/components/MdViewerOverlay.vue'
@@ -55,14 +54,12 @@ import type { KbMessage, KbSrcFile } from './types'
 import logoBlack from './assets/logo-b.svg'
 import logoWhite from './assets/logo-w.svg'
 
-const props = defineProps<{
-  language: KbQaLang
-}>()
+const language: KbQaLang = 'zh'
 const emit = defineEmits<{
   openDoc: [path: string]
 }>()
 
-const text = computed(() => kbQaText(props.language))
+const text = computed(() => kbQaText(language))
 const open = ref(false)
 /** 形变过程中保持面板尺寸，避免收起时提前缩壳 */
 const morphing = ref(false)
@@ -95,6 +92,7 @@ const mdViewerSources = ref<MdViewerSource[]>([])
 const mdViewerIndex = ref(0)
 /** 欢迎区热门问题 */
 const hotQuestions = ref<KbHotQuestion[]>([])
+const visibleQuestions = ref<KbHotQuestion[]>([])
 const hotQuestionsLoading = ref(false)
 
 /** 澄清问题在 busy 期间先上屏用户气泡，待回合结束后再发 WS */
@@ -142,7 +140,7 @@ const canSend = computed(
 )
 
 const fabAriaLabel = computed(() => {
-  if (!open.value && isBusy.value) {
+  if (!open.value && (isBusy.value || connecting.value)) {
     return statusLabel.value || text.value.thinking
   }
   return text.value.fab
@@ -163,10 +161,8 @@ const assistantRenderedSegments = computed(() =>
 )
 
 const exampleQuestions = computed(() => {
-  if (hotQuestions.value.length) {
-    return hotQuestions.value
-  }
-  return text.value.examples.map((question) => ({ question }))
+  if (visibleQuestions.value.length) return visibleQuestions.value
+  return text.value.examples.slice(0, 3).map((question) => ({ question }))
 })
 
 /** 当前流式尾段原文 */
@@ -266,12 +262,6 @@ function flushActivateMarkdownBlocks() {
   runMarkdownBlocks()
 }
 
-watch(
-  () => props.language,
-  (lang) => setJ2aLocale(lang),
-  { immediate: true }
-)
-
 /** 流式尾段就地增量更新，避免每 token 销毁 pending 图表占位 */
 watch(
   [activeAssistantTailText, activeTailSegmentEl],
@@ -369,17 +359,10 @@ watch(
 )
 
 onMounted(() => {
-  setJ2aLocale(props.language)
+  window.visualViewport?.addEventListener('resize', syncKeyboardViewport)
+  window.visualViewport?.addEventListener('scroll', syncKeyboardViewport)
+  window.addEventListener('keydown', handleWidgetKeydown)
 })
-
-watch(
-  () => props.language,
-  (lang) => {
-    setJ2aLocale(lang)
-    hotQuestions.value = []
-    void loadHotQuestions()
-  }
-)
 
 /** 拉取热门问题（对齐 j2a getQaTemplate） */
 async function loadHotQuestions() {
@@ -388,11 +371,33 @@ async function loadHotQuestions() {
   }
   hotQuestionsLoading.value = true
   try {
-    hotQuestions.value = await fetchQaTemplate(props.language)
+    hotQuestions.value = await fetchQaTemplate(language)
+    refreshDisplayedQuestions()
   } catch {
     hotQuestions.value = []
+    visibleQuestions.value = []
   } finally {
     hotQuestionsLoading.value = false
+  }
+}
+
+function refreshDisplayedQuestions() {
+  const pool = hotQuestions.value.length
+    ? hotQuestions.value
+    : text.value.examples.map((question) => ({ question }))
+  const current = new Set(visibleQuestions.value.map((item) => item.question))
+  const candidates = pool.filter((item) => !current.has(item.question))
+  const source = candidates.length >= Math.min(3, pool.length) ? candidates : pool
+  visibleQuestions.value = [...source]
+    .sort(() => Math.random() - 0.5)
+    .slice(0, 3)
+}
+
+function handleRefreshQuestions() {
+  if (hotQuestions.value.length || text.value.examples.length) {
+    refreshDisplayedQuestions()
+  } else {
+    void loadHotQuestions()
   }
 }
 
@@ -403,7 +408,10 @@ function handleHotQuestionClick(question: string) {
 }
 
 onBeforeUnmount(() => {
-  stopTurn(session, props.language)
+    stopTurn(session, language)
+  window.visualViewport?.removeEventListener('resize', syncKeyboardViewport)
+  window.visualViewport?.removeEventListener('scroll', syncKeyboardViewport)
+  window.removeEventListener('keydown', handleWidgetKeydown)
   if (copiedTimer) {
     window.clearTimeout(copiedTimer)
   }
@@ -464,7 +472,41 @@ function toggleOpen() {
   morphing.value = true
   open.value = true
   void loadHotQuestions()
-  nextTick(() => inputEl.value?.focus())
+  nextTick(() => {
+    syncKeyboardViewport()
+  })
+}
+
+function scrollInputIntoView() {
+  window.setTimeout(() => {
+    inputEl.value?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' })
+  }, 80)
+}
+
+function syncKeyboardViewport() {
+  const root = document.querySelector<HTMLElement>('.kb-qa-root')
+  const viewport = window.visualViewport
+  if (!root || !viewport) return
+  const keyboardOffset = Math.max(
+    0,
+    window.innerHeight - viewport.height - viewport.offsetTop
+  )
+  const hasKeyboard = keyboardOffset > 80
+  root.style.setProperty('--kb-qa-viewport-height', `${viewport.height}px`)
+  root.style.setProperty('--kb-qa-keyboard-offset', `${hasKeyboard ? keyboardOffset : 0}px`)
+  if (hasKeyboard && open.value) scrollInputIntoView()
+}
+
+function handleInputFocus() {
+  syncKeyboardViewport()
+  scrollInputIntoView()
+}
+
+function handleWidgetKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && open.value) {
+    event.preventDefault()
+    minimizePanel()
+  }
 }
 
 function minimizePanel() {
@@ -539,7 +581,7 @@ async function handleAskQuestionAnswer(message: KbMessage, answer: string) {
     return
   }
 
-  const started = await startTurn(session, normalized, props.language)
+  const started = await startTurn(session, normalized, language)
   if (!started) {
     return
   }
@@ -565,7 +607,7 @@ async function flushPendingAskQuestionAnswer() {
     return
   }
   pendingAskAnswer.value = null
-  const started = await startTurn(session, userMsg.content, props.language, {
+  const started = await startTurn(session, userMsg.content, language, {
     existingUserMessage: userMsg
   })
   if (started) {
@@ -625,7 +667,7 @@ async function handleSend() {
   // 先清空；仅锁拒绝时回填（用户气泡已乐观上屏则不再回填）
   input.value = ''
   stickToBottom.value = true
-  const started = await startTurn(session, content, props.language)
+  const started = await startTurn(session, content, language)
   if (!started) {
     input.value = content
     await nextTick()
@@ -638,7 +680,7 @@ async function handleSend() {
 }
 
 function handleStop() {
-  stopTurn(session, props.language)
+  stopTurn(session, language)
 }
 
 /** 新建对话：同步切断上一轮并申请新 contextId */
@@ -648,7 +690,7 @@ async function handleNewChat() {
   input.value = ''
   resetting.value = true
   try {
-    await resetSession(session, props.language)
+    await resetSession(session, language)
     await nextTick()
     inputEl.value?.focus()
   } finally {
@@ -718,14 +760,14 @@ function handleBubbleClick(event: MouseEvent) {
       class="kb-qa-root"
       :class="{ 'is-morphing': morphing }"
       :data-open="open"
-      :data-busy="isBusy"
+      :data-busy="isBusy || connecting"
     >
       <Transition name="kb-qa-fab">
         <button
           v-show="!open"
           type="button"
           class="kb-qa-fab"
-          :class="{ 'is-busy': isBusy }"
+          :class="{ 'is-busy': isBusy || connecting }"
           :aria-label="fabAriaLabel"
           :title="fabAriaLabel"
           @click="toggleOpen"
@@ -734,7 +776,7 @@ function handleBubbleClick(event: MouseEvent) {
           <span class="kb-qa-fab-ring" aria-hidden="true" />
           <span class="kb-qa-fab-spin" aria-hidden="true" />
           <span class="kb-qa-fab-core" aria-hidden="true">
-            <span class="kb-qa-fab-label">AI</span>
+            <span class="kb-qa-fab-label">{{ text.askAi }}</span>
           </span>
         </button>
       </Transition>
@@ -750,11 +792,8 @@ function handleBubbleClick(event: MouseEvent) {
             <div class="kb-qa-title-wrap">
               <span class="kb-qa-title-mark" aria-hidden="true" />
               <h2 class="kb-qa-title">{{ text.title }}</h2>
-              <a
+              <div
                 class="kb-qa-brand"
-                :href="knowledgeQaConfig.brandUrl"
-                target="_blank"
-                rel="noopener noreferrer"
                 :aria-label="`${text.poweredBy} J2Agent`"
               >
                 <span class="kb-qa-brand-label">{{ text.poweredBy }}</span>
@@ -770,7 +809,7 @@ function handleBubbleClick(event: MouseEvent) {
                   alt="J2Agent"
                   height="22"
                 />
-              </a>
+              </div>
             </div>
             <div class="kb-qa-header-actions">
               <button
@@ -827,13 +866,15 @@ function handleBubbleClick(event: MouseEvent) {
                   class="kb-qa-hot-questions"
                 >
                   <div class="kb-qa-hot-head">
-                    <span class="kb-qa-hot-title">{{ text.hotQuestions }}</span>
                     <button
                       type="button"
                       class="kb-qa-hot-refresh"
                       :disabled="hotQuestionsLoading"
-                      @click="loadHotQuestions"
+                      @click="handleRefreshQuestions"
                     >
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">
+                        <path d="M20 11a8 8 0 0 0-14.9-3M4 5v4h4M4 13a8 8 0 0 0 14.9 3M20 19v-4h-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
                       {{ text.refreshHotQuestions }}
                     </button>
                   </div>
@@ -1024,6 +1065,7 @@ function handleBubbleClick(event: MouseEvent) {
                 :maxlength="INPUT_MAX_LENGTH"
                 :placeholder="text.placeholder"
                 :disabled="!configReady || isBusy || sending"
+                @focus="handleInputFocus"
                 @keydown="onKeydown"
                 @compositionstart="onCompositionStart"
                 @compositionend="onCompositionEnd"
@@ -1077,6 +1119,8 @@ function handleBubbleClick(event: MouseEvent) {
 <style scoped>
 .kb-qa-root {
   --kb-qa-z: 1200;
+  --kb-qa-viewport-height: 100vh;
+  --kb-qa-keyboard-offset: 0px;
   --kb-qa-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --kb-qa-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   /* 停止按钮专用色 */
@@ -1091,34 +1135,35 @@ function handleBubbleClick(event: MouseEvent) {
   --n-color-neutral-w: var(--n-color-bg-elevated);
   --n-color-preview-bg: var(--n-color-bg-subtle);
   position: fixed;
-  /* 与视口右下留白，避免贴边压迫内容区 */
-  right: max(28px, env(safe-area-inset-right, 0px));
-  bottom: max(40px, env(safe-area-inset-bottom, 0px));
+  /* 胶囊与展开面板共用同一右下锚点，避免形变时漂移 */
+  right: max(48px, env(safe-area-inset-right, 0px));
+  bottom: max(36px, env(safe-area-inset-bottom, 0px));
   z-index: var(--kb-qa-z);
   font-family: var(--n-font-text);
-  width: 56px;
-  height: 56px;
+  width: 104px;
+  height: 44px;
 }
 
 .kb-qa-root[data-open='true'],
 .kb-qa-root.is-morphing {
-  width: 45vw;
-  height: 80vh;
-  max-width: calc(100vw - 56px);
-  max-height: calc(100vh - 48px);
+  width: 104px;
+  height: 44px;
 }
 
 @media (max-width: 640px) {
   .kb-qa-root {
-    right: max(16px, env(safe-area-inset-right, 0px));
-    bottom: max(28px, env(safe-area-inset-bottom, 0px));
+    right: max(24px, env(safe-area-inset-right, 0px));
+    bottom: max(24px, env(safe-area-inset-bottom, 0px));
   }
 
   .kb-qa-root[data-open='true'],
   .kb-qa-root.is-morphing {
-    /* 窄屏聊天区需接近全宽，高度仍约 80% */
-    width: calc(100vw - 32px);
-    height: 80vh;
+    width: 104px;
+    height: 44px;
+  }
+
+  .kb-qa-panel {
+    width: calc(100vw - 24px);
     max-width: none;
   }
 }
@@ -1128,22 +1173,17 @@ function handleBubbleClick(event: MouseEvent) {
   position: absolute;
   right: 0;
   bottom: 0;
-  width: 56px;
-  height: 56px;
+  min-width: 102px;
+  width: auto;
+  height: 44px;
   border: 1px solid color-mix(in srgb, var(--n-color-primary) 26%, var(--n-color-border-soft));
-  border-radius: 50%;
-  padding: 0;
+  border-radius: 999px;
+  padding: 0 17px;
   overflow: visible;
-  background:
-    radial-gradient(
-      circle at 32% 26%,
-      color-mix(in srgb, var(--n-color-primary) 32%, white),
-      color-mix(in srgb, var(--n-color-primary) 10%, var(--n-color-bg-glass-strong)) 58%,
-      var(--n-color-bg-glass-strong) 100%
-    );
+  background: color-mix(in srgb, var(--n-color-bg-glass-strong) 92%, white);
   box-shadow:
-    var(--n-shadow-elevation-3),
-    0 10px 26px color-mix(in srgb, var(--n-color-primary) 24%, transparent);
+    0 8px 24px rgba(38, 61, 91, 0.14),
+    inset 0 1px rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(var(--n-glass-blur-3)) saturate(var(--n-glass-saturate));
   -webkit-backdrop-filter: blur(var(--n-glass-blur-3))
     saturate(var(--n-glass-saturate));
@@ -1151,17 +1191,18 @@ function handleBubbleClick(event: MouseEvent) {
   cursor: pointer;
   display: grid;
   place-items: center;
+  isolation: isolate;
   transition:
-    transform 0.28s var(--kb-qa-ease),
-    box-shadow 0.28s var(--kb-qa-ease),
+    transform 0.22s var(--kb-qa-ease),
+    box-shadow 0.22s var(--kb-qa-ease),
     border-color 0.2s ease;
 }
 
 .kb-qa-fab:hover {
-  transform: translateY(-3px) scale(1.05);
+  transform: translateY(-2px) scale(1.015);
   box-shadow:
-    var(--n-shadow-elevation-4),
-    0 14px 32px color-mix(in srgb, var(--n-color-primary) 34%, transparent);
+    0 12px 30px rgba(38, 61, 91, 0.18),
+    0 0 0 4px color-mix(in srgb, var(--n-color-primary) 9%, transparent);
   border-color: color-mix(in srgb, var(--n-color-primary) 48%, var(--n-color-border-soft));
 }
 
@@ -1171,26 +1212,21 @@ function handleBubbleClick(event: MouseEvent) {
 
 .kb-qa-fab-glow {
   position: absolute;
-  inset: -12px;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--n-color-primary) 32%, transparent),
-    transparent 70%
-  );
-  opacity: 0.55;
+  inset: -9px;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--n-color-primary) 20%, transparent);
+  opacity: 0;
+  filter: blur(9px);
   pointer-events: none;
   z-index: -1;
-  transition:
-    opacity 0.28s var(--kb-qa-ease),
-    transform 0.28s var(--kb-qa-ease);
+  transform: scale(0.96);
 }
 
 .kb-qa-fab-ring {
   position: absolute;
   inset: -3px;
-  border-radius: 50%;
-  border: 1.5px solid color-mix(in srgb, var(--n-color-primary) 45%, transparent);
+  border-radius: inherit;
+  border: 1px solid color-mix(in srgb, var(--n-color-primary) 30%, transparent);
   opacity: 0;
   pointer-events: none;
   animation: kb-qa-fab-pulse 2.8s var(--kb-qa-ease) infinite;
@@ -1199,31 +1235,28 @@ function handleBubbleClick(event: MouseEvent) {
 .kb-qa-fab-spin {
   position: absolute;
   inset: -4px;
-  border-radius: 50%;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0%,
-    color-mix(in srgb, var(--n-color-primary) 75%, white) 28%,
-    transparent 55%
-  );
+  border-radius: inherit;
+  border: 1px solid color-mix(in srgb, var(--n-color-primary) 16%, transparent);
+  background: transparent;
   opacity: 0;
   pointer-events: none;
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
 }
 
 .kb-qa-fab.is-busy {
-  animation: kb-qa-fab-breathe 1.6s ease-in-out infinite;
+  animation: none;
 }
 
-.kb-qa-fab.is-busy .kb-qa-fab-spin {
-  opacity: 1;
-  animation: kb-qa-fab-spin 1.1s linear infinite;
+.kb-qa-fab.is-busy .kb-qa-fab-glow {
+  opacity: 0;
+  animation: kb-qa-fab-spread 2.2s ease-out infinite;
 }
 
 .kb-qa-fab.is-busy .kb-qa-fab-ring {
-  animation: none;
-  opacity: 0;
+  display: none;
+}
+
+.kb-qa-fab.is-busy .kb-qa-fab-spin {
+  display: none;
 }
 
 .kb-qa-fab-core {
@@ -1234,10 +1267,10 @@ function handleBubbleClick(event: MouseEvent) {
 
 .kb-qa-fab-label {
   font-family: ui-sans-serif, var(--n-font-display);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   font-variation-settings: "wght" 520;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.04em;
   line-height: 1;
   font-optical-sizing: auto;
   font-kerning: normal;
@@ -1247,12 +1280,12 @@ function handleBubbleClick(event: MouseEvent) {
 }
 
 .kb-qa-fab:hover .kb-qa-fab-core {
-  transform: scale(1.05);
+  transform: scale(1.02);
 }
 
 .kb-qa-fab:hover .kb-qa-fab-glow {
-  opacity: 0.9;
-  transform: scale(1.08);
+  opacity: 0.32;
+  transform: scale(1.02);
 }
 
 @keyframes kb-qa-fab-pulse {
@@ -1269,9 +1302,20 @@ function handleBubbleClick(event: MouseEvent) {
   }
 }
 
-@keyframes kb-qa-fab-spin {
-  to {
-    transform: rotate(360deg);
+@keyframes kb-qa-fab-spread {
+  0% {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  12% {
+    opacity: 0.62;
+  }
+  42% {
+    opacity: 0.26;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.2);
   }
 }
 
@@ -1311,10 +1355,16 @@ function handleBubbleClick(event: MouseEvent) {
 
 /* —— Panel —— */
 .kb-qa-panel {
+  position: absolute;
+  right: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
-  width: 100%;
-  height: 100%;
+  width: min(520px, calc(100vw - 56px));
+  height: min(80vh, calc(var(--kb-qa-viewport-height) - 32px));
+  max-width: calc(100vw - 56px);
+  max-height: calc(100vh - 48px);
+  min-width: 0;
   border: 1px solid var(--n-color-border-soft);
   border-radius: 20px;
   background: var(--n-color-bg-glass-overlay);
@@ -1342,14 +1392,14 @@ function handleBubbleClick(event: MouseEvent) {
 
 .kb-qa-panel-enter-from {
   opacity: 0;
-  transform: scale(0.14);
-  border-radius: 50%;
+  transform: translateY(12px) scale(0.98);
+  border-radius: 22px;
 }
 
 .kb-qa-panel-leave-to {
   opacity: 0;
-  transform: scale(0.14);
-  border-radius: 50%;
+  transform: translateY(12px) scale(0.98);
+  border-radius: 22px;
 }
 
 .kb-qa-panel-enter-active :deep(.kb-qa-header),
@@ -1398,18 +1448,21 @@ function handleBubbleClick(event: MouseEvent) {
 }
 
 .kb-qa-root[data-busy='true'] .kb-qa-title-mark {
-  animation: kb-qa-mark-breathe 1.2s ease-in-out infinite;
+  animation: kb-qa-mark-pulse 1.8s ease-out infinite;
 }
 
-@keyframes kb-qa-mark-breathe {
-  0%,
-  100% {
-    transform: scale(1);
+@keyframes kb-qa-mark-pulse {
+  0% {
     opacity: 1;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--n-color-primary) 18%, transparent), 0 0 0 3px color-mix(in srgb, var(--n-color-primary) 22%, transparent);
   }
-  50% {
-    transform: scale(0.82);
-    opacity: 0.7;
+  70% {
+    opacity: 0.78;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--n-color-primary) 12%, transparent), 0 0 0 12px color-mix(in srgb, var(--n-color-primary) 0%, transparent);
+  }
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--n-color-primary) 18%, transparent), 0 0 0 3px color-mix(in srgb, var(--n-color-primary) 0%, transparent);
   }
 }
 
@@ -1499,6 +1552,7 @@ function handleBubbleClick(event: MouseEvent) {
 .kb-qa-messages {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   overflow: auto;
   padding: 14px 12px 8px;
   -webkit-overflow-scrolling: touch;
@@ -1560,6 +1614,8 @@ function handleBubbleClick(event: MouseEvent) {
   align-items: flex-start;
   gap: 10px;
   padding: 28px 12px 20px;
+  width: 100%;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -1607,13 +1663,15 @@ function handleBubbleClick(event: MouseEvent) {
   flex-direction: column;
   gap: 8px;
   width: min(100%, 360px);
+  max-width: 100%;
+  min-width: 0;
   margin-top: 4px;
 }
 
 .kb-qa-hot-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px;
 }
 
@@ -1627,9 +1685,21 @@ function handleBubbleClick(event: MouseEvent) {
   border: none;
   background: none;
   padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 12px;
   color: var(--n-color-primary);
   cursor: pointer;
+}
+
+.kb-qa-hot-refresh svg {
+  flex: 0 0 auto;
+  transition: transform 0.2s ease;
+}
+
+.kb-qa-hot-refresh:hover:not(:disabled) svg {
+  transform: rotate(-35deg);
 }
 
 .kb-qa-hot-refresh:disabled {
@@ -1639,6 +1709,10 @@ function handleBubbleClick(event: MouseEvent) {
 
 .kb-qa-hot-item {
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 10px 12px;
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--n-color-text) 10%, transparent);
@@ -1698,7 +1772,10 @@ function handleBubbleClick(event: MouseEvent) {
   transition:
     opacity 0.2s ease,
     transform 0.24s ease;
-  position: absolute;
+}
+
+.kb-qa-msg-move {
+  transition: transform 0.28s var(--kb-qa-ease-out);
 }
 
 .kb-qa-msg-enter-from {
@@ -1724,18 +1801,6 @@ function handleBubbleClick(event: MouseEvent) {
   font-size: 14px;
   line-height: 1.55;
   word-break: break-word;
-  animation: kb-qa-bubble-fade-in 0.4s var(--kb-qa-ease-out) both;
-}
-
-@keyframes kb-qa-bubble-fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .kb-qa-bubble.user {
@@ -1763,7 +1828,7 @@ function handleBubbleClick(event: MouseEvent) {
 
 /* 流式输出：句末光标 + 轻淡入 */
 .kb-qa-assistant-md.is-streaming {
-  animation: kb-qa-stream-soft 0.35s ease both;
+  opacity: 1;
 }
 
 .kb-qa-assistant-md.is-streaming::after {
@@ -1777,15 +1842,6 @@ function handleBubbleClick(event: MouseEvent) {
   background: var(--n-color-primary);
   box-shadow: 0 0 8px color-mix(in srgb, var(--n-color-primary) 45%, transparent);
   animation: kb-qa-caret-blink 1s steps(1) infinite;
-}
-
-@keyframes kb-qa-stream-soft {
-  from {
-    opacity: 0.72;
-  }
-  to {
-    opacity: 1;
-  }
 }
 
 @keyframes kb-qa-caret-blink {
@@ -2026,6 +2082,14 @@ function handleBubbleClick(event: MouseEvent) {
 </style>
 
 <style>
+/* iOS Safari 会将字号小于 16px 的表单控件自动放大 */
+@supports (-webkit-touch-callout: none) {
+  .kb-qa-input,
+  .kb-qa-ask-input {
+    font-size: 16px !important;
+  }
+}
+
 /* 主题切换需穿透 scoped，按 html[data-theme] 显隐 logo */
 .kb-qa-brand-logo--light {
   display: block;

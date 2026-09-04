@@ -19,41 +19,16 @@ const messages: Record<string, string> = {
   'common.fail': '失败'
 }
 
-const enMessages: Record<string, string> = {
-  'markdownRenderer.copyCode': 'Copy code',
-  'markdownRenderer.copy': 'Copy',
-  'markdownRenderer.diagramError.copyAllDiagnostics': 'Copy diagnostics',
-  'markdownRenderer.copyAll': 'Copy all',
-  'markdownRenderer.diagramError.viewDetails': 'View error details',
-  'mdViewer.loading': 'Loading…',
-  'mdViewer.loadFailed': 'Failed to load document',
-  'mdViewer.download': 'Download',
-  'mdViewer.close': 'Close preview',
-  'mdViewer.prev': 'Previous document',
-  'mdViewer.next': 'Next document',
-  'diagramPreview.saveSvg': 'Save SVG',
-  'common.success': 'Success',
-  'common.fail': 'Failed'
-}
-
-let currentLang: 'zh' | 'en' = 'zh'
-
-/** 供悬浮框切换语言时同步 j2a 组件文案 */
-export function setJ2aLocale(lang: 'zh' | 'en') {
-  currentLang = lang
-}
-
 export function t(
   key: string,
   _params?: unknown,
   fallback?: string
 ): string {
-  const table = currentLang === 'en' ? enMessages : messages
-  return table[key] ?? fallback ?? key
+  return messages[key] ?? fallback ?? key
 }
 
 export const locale = {
   lang: {
-    value: currentLang
+    value: 'zh'
   }
 }
