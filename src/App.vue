@@ -2,6 +2,8 @@
 import {computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import {createPortalDiagramRenderer, createPortalMarkdownRenderer} from './portalMarkdown'
 import {createPortalDocumentStore} from './portalDocuments'
+import DiagramPreviewOverlay from './knowledge-qa/j2a/components/DiagramPreviewOverlay.vue'
+import {cloneSvgForPreview} from './knowledge-qa/j2a/utils/diagramPreview'
 import './knowledge-qa/j2a/styles/markdown.scss'
 
 const KbQaWidget = defineAsyncComponent(() => import('./knowledge-qa/KbQaWidget.vue'))
@@ -38,8 +40,6 @@ const copy = {
 	noMatch: '没有匹配的文档',
 	loading: '正在加载正文…',
 	searchDocs: '搜索已收录文档',
-	path: '输入任意 .md 路径',
-	open: '打开',
 	close: '关闭文档',
 	github: '在 GitHub 查看',
 	docsTitle: '文档中心'
@@ -61,14 +61,12 @@ const getDocPathFromUrl = () => {
 	}
 }
 const selectedDoc = ref(getDocPathFromUrl() || 'README.md')
-const docPath = ref('')
 const docHtml = ref('')
 const docContentRef = ref(null)
 const previewImage = ref('')
-const diagramPreview = ref('')
+const diagramPreviewSvgs = ref([])
+const diagramPreviewIndex = ref(0)
 const mobileDocsNavOpen = ref(false)
-const screenIndex = ref(0)
-let screenRotationTimer = null
 
 const rawBase = 'https://j2agent-ai.jerryt92.top/j2agent-docs/'
 const fallbackDocs = [
@@ -232,19 +230,6 @@ const loadDoc = async (path) => {
 		docLoading.value = false
 	}
 }
-const loadDocByPath = () => {
-	const path = docPath.value.trim().replace(/^\//, '')
-	if (!path) return
-	if (!path.toLowerCase().endsWith('.md')) {
-		docError.value = '请输入以 .md 结尾的仓库文件路径';
-		return
-	}
-	if (!docs.value.some((doc) => doc.path === path)) docs.value.unshift({
-		path,
-		title: path.split('/').pop().replace(/\.md$/i, '')
-	})
-	loadDoc(path)
-}
 const handleMarkdownClick = (event) => {
 	const clicked = event.target instanceof Element ? event.target : null
 	const target = clicked?.closest('.md-code-copy')
@@ -254,7 +239,7 @@ const handleMarkdownClick = (event) => {
 		return
 	}
 	const diagram = clicked?.closest('.md-diagram')
-	if (diagram && clicked?.closest('svg')) {
+	if (diagram && diagram.querySelector('svg')) {
 		event.preventDefault()
 		openDiagramPreview(diagram)
 		return
@@ -300,16 +285,12 @@ onMounted(() => {
 	syncReaderRoute();
 	window.addEventListener('hashchange', syncReaderRoute)
 	window.addEventListener('keydown', handleGlobalKeydown)
-	screenRotationTimer = window.setInterval(() => {
-		screenIndex.value = (screenIndex.value + 1) % screens.length
-	}, 4600)
 })
 onBeforeUnmount(() => {
 	window.removeEventListener('hashchange', syncReaderRoute)
 	window.removeEventListener('keydown', handleGlobalKeydown)
 	documentStore.cancel()
 	portalDiagramRenderer.cancel()
-	if (screenRotationTimer) window.clearInterval(screenRotationTimer)
 })
 const notify = (message) => {
 	toast.value = message
@@ -322,40 +303,18 @@ const openImagePreview = (event) => {
 }
 const closeImagePreview = () => { previewImage.value = '' }
 const openDiagramPreview = (diagram) => {
-	const svg = diagram.querySelector('svg')
+const svg = diagram.querySelector('svg')
 	if (!svg) return
-	const clone = svg.cloneNode(true)
-	clone.style.width = ''
-	clone.style.height = ''
-	clone.style.maxWidth = ''
-	clone.style.maxHeight = ''
-	clone.style.margin = ''
-	const viewBox = clone.viewBox?.baseVal
-	if (viewBox?.width && viewBox?.height) {
-		clone.setAttribute('width', String(viewBox.width))
-		clone.setAttribute('height', String(viewBox.height))
-	}
-	diagramPreview.value = clone.outerHTML
+	const diagrams = [...document.querySelectorAll('.markdown-view .md-diagram:not(.md-diagram-error) .md-diagram-body svg')]
+	diagramPreviewSvgs.value = diagrams.map((item) => cloneSvgForPreview(item))
+	diagramPreviewIndex.value = Math.max(0, diagrams.indexOf(svg))
 }
-const closeDiagramPreview = () => { diagramPreview.value = '' }
-const rotateScreen = () => { screenIndex.value = (screenIndex.value + 1) % screens.length }
+const closeDiagramPreview = () => { diagramPreviewSvgs.value = [] }
 const handleGlobalKeydown = (event) => {
 	if (event.key === 'Escape') {
 		closeImagePreview()
-		closeDiagramPreview()
 	}
 }
-
-const screens = [
-	{ image: '/screens/02-chat-analysis.png', title: '通用 AI 助手', description: '调用工具，流式输出分析结果' },
-	{ image: '/screens/01-task-list.png', title: '任务与执行轨迹', description: '多任务状态实时可见' },
-	{ image: '/screens/03-kb-list.png', title: '知识库管理', description: '远程仓库与访问权限统一管理' },
-	{ image: '/screens/04-kb-sync.png', title: '知识库同步', description: '增量维护，状态清晰可追溯' },
-	{ image: '/screens/05-chat-audit.png', title: 'RAG 参数配置', description: '稠密与稀疏权重可调' },
-	{ image: '/screens/06-rag-settings.png', title: 'Token 与会话审计', description: '跨用户记录可查询、可复盘' },
-	{ image: '/screens/07-agent-management.png', title: '智能体管理', description: '权限、插件与全局配置集中维护' }
-]
-const displayScreens = computed(() => [...screens.slice(screenIndex.value), ...screens.slice(0, screenIndex.value)])
 
 const features = {
 	rag: {
@@ -457,17 +416,28 @@ const features = {
 						<div class="eyebrow">{{ copy.productEyebrow }}</div>
 						<h2>{{ copy.productTitle[0] }}<br/><span>{{ copy.productTitle[1] }}</span></h2></div>
 					<p>{{ copy.productBody }}</p></div>
-				<div class="screen-deck-wrap">
-					<div class="screen-grid screen-deck" @click="openImagePreview">
-						<figure v-for="(screen, index) in displayScreens" :key="screen.image" class="screen-card" :class="{ 'screen-card-active': index === 0 }">
-							<img :src="screen.image" :alt="`J2Agent ${screen.title}界面`"/>
-							<figcaption><strong>{{ screen.title }}</strong><span>{{ screen.description }}</span></figcaption>
-						</figure>
-					</div>
-					<div class="screen-deck-controls">
-						<span>产品界面 · {{ screenIndex + 1 }} / {{ screens.length }}</span>
-						<button type="button" @click.stop="rotateScreen">翻下一张 <b>↗</b></button>
-					</div>
+				<div class="screen-grid" @click="openImagePreview">
+					<figure class="screen-card wide"><img src="/screens/02-chat-analysis.png" alt="J2Agent 通用 AI 助手与分析结果界面"/>
+						<figcaption><strong>通用 AI 助手</strong><span>调用工具，流式输出分析结果</span></figcaption>
+					</figure>
+					<figure class="screen-card"><img src="/screens/01-task-list.png" alt="J2Agent 智能体任务列表界面"/>
+						<figcaption><strong>任务与执行轨迹</strong><span>多任务状态实时可见</span></figcaption>
+					</figure>
+					<figure class="screen-card"><img src="/screens/03-kb-list.png" alt="J2Agent 知识库列表界面"/>
+						<figcaption><strong>知识库管理</strong><span>远程仓库与访问权限统一管理</span></figcaption>
+					</figure>
+					<figure class="screen-card"><img src="/screens/04-kb-sync.png" alt="J2Agent 知识库同步状态界面"/>
+						<figcaption><strong>知识库同步</strong><span>增量维护，状态清晰可追溯</span></figcaption>
+					</figure>
+					<figure class="screen-card"><img src="/screens/05-chat-audit.png" alt="J2Agent RAG 检索设置界面"/>
+						<figcaption><strong>RAG 参数配置</strong><span>稠密与稀疏权重可调</span></figcaption>
+					</figure>
+					<figure class="screen-card"><img src="/screens/06-rag-settings.png" alt="J2Agent 聊天审计界面"/>
+						<figcaption><strong>Token 与会话审计</strong><span>跨用户记录可查询、可复盘</span></figcaption>
+					</figure>
+					<figure class="screen-card"><img src="/screens/07-agent-management.png" alt="J2Agent 智能体管理界面"/>
+						<figcaption><strong>智能体管理</strong><span>权限、插件与全局配置集中维护</span></figcaption>
+					</figure>
 				</div>
 			</section>
 			<div v-if="previewImage" class="image-preview-overlay" role="dialog" aria-modal="true"
@@ -493,12 +463,12 @@ const features = {
 				</div>
 			</section>
 		</main>
-		<div v-if="diagramPreview" class="diagram-preview-overlay" role="dialog" aria-modal="true"
-		     aria-label="图表预览" @click.self="closeDiagramPreview">
-			<button class="image-preview-close" type="button" aria-label="关闭图表预览"
-			        @click="closeDiagramPreview">×</button>
-			<div class="diagram-preview-content" v-html="diagramPreview" @click.stop></div>
-		</div>
+		<DiagramPreviewOverlay
+			:visible="diagramPreviewSvgs.length > 0"
+			:diagrams="diagramPreviewSvgs"
+			:initial-index="diagramPreviewIndex"
+			@close="closeDiagramPreview"
+		/>
 		<section v-if="readerOpen" id="docs" class="reader-overlay" aria-label="J2Agent 文档中心">
 			<div class="reader-shell glass-panel">
 				<header class="reader-head">
@@ -519,10 +489,6 @@ const features = {
 					</div>
 					<aside class="doc-nav" :class="{ 'mobile-doc-nav-open': mobileDocsNavOpen }"><input v-model="docSearch" type="search" :placeholder="copy.searchDocs"
 					                              :aria-label="copy.searchDocs"/>
-						<div class="path-loader"><input v-model="docPath" type="text" :placeholder="copy.path"
-						                                aria-label="输入任意 Markdown 路径" @keyup.enter="loadDocByPath"/>
-							<button @click="loadDocByPath">{{ copy.open }}</button>
-						</div>
 						<template v-for="row in treeRows" :key="`${row.type}:${row.path}`">
 							<button v-if="row.type === 'dir'" class="doc-tree-row doc-tree-dir" :style="{ '--tree-depth': row.depth }"
 							        :aria-expanded="row.expanded" @click="toggleDocDir(row.path)"><span class="doc-tree-chevron">{{ row.expanded ? '⌄' : '›' }}</span>{{ row.name }}</button>
@@ -539,7 +505,7 @@ const features = {
 				</div>
 			</div>
 		</section>
-		<footer><span class="footer-meta"><span>© 2026 jerryt92</span><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">滇ICP备2026015130号</a></span><span class="footer-brand"><img src="/logo-b.svg" alt="J2Agent AI"/><span>{{ copy.footer }}</span></span>
+		<footer><span class="footer-brand"><img src="/logo-b.svg" alt="J2Agent AI"/><span>{{ copy.footer }}</span></span><span class="footer-meta"><span>© 2026 jerryt92</span><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">滇ICP备2026015130号</a></span>
 		</footer>
 		<KbQaWidget @open-doc="openDocFromAi"/>
 		<transition name="toast">

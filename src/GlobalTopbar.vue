@@ -4,15 +4,19 @@ defineProps({
 })
 
 defineEmits(['open-doc'])
+
+const scrollToSection = (id) => {
+	document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 </script>
 
 <template>
 	<header class="topbar">
 		<a href="/" class="brand" aria-label="返回首页"><img src="/logo-b.svg" alt="J2Agent AI"/></a>
 		<nav v-if="showHomeNav">
-			<a href="#technology">技术能力</a>
-			<a href="#product">产品界面</a>
-			<a href="#architecture">平台架构</a>
+			<a href="/" @click.prevent="scrollToSection('technology')">技术能力</a>
+			<a href="/" @click.prevent="scrollToSection('product')">产品界面</a>
+			<a href="/" @click.prevent="scrollToSection('architecture')">平台架构</a>
 		</nav>
 		<div class="topbar-actions">
 			<a class="glass-button github-project-link" href="https://github.com/j2agent-ai" target="_blank" rel="noopener noreferrer" aria-label="打开 J2Agent AI GitHub 项目">

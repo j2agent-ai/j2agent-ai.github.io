@@ -147,14 +147,14 @@ html,body{min-width:320px;overflow-x:hidden}
 }
 
 .footer-meta {
-	display: inline-flex;
-	flex-direction: column;
-	align-items: flex-start;
-	gap: 2px;
-	margin-left: 0;
-	line-height: 1.5;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	margin: 8px 0 0;
+	line-height: 1.45;
 }
-.footer-brand { display: inline-flex; align-items: center; gap: 22px; margin-left: 22px; }
+.footer-brand { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .footer-brand img { width: 110px; }
 .footer-meta a { color: inherit; text-decoration: none; }
 .footer-meta a:hover { color: #5b85ca; }
@@ -164,8 +164,7 @@ html,body{min-width:320px;overflow-x:hidden}
 .milvus-link img { width: 105px; height: 24px; object-fit: contain; }
 @media(max-width:500px) {
 	.footer-meta { width: auto; }
-	.footer-brand { gap: 12px; margin-left: 0; }
-	.footer-brand span { max-width: 190px; }
+	.footer-brand { gap: 12px; }
 }
 
 .tech-tabs button { grid-template-columns: 28px 1fr auto; }
@@ -179,59 +178,191 @@ html,body{min-width:320px;overflow-x:hidden}
 	.hero-glass { padding-bottom: 30px; }
 }
 
-/* 产品截图牌堆：卡片按层叠放并自动翻动 */
-.screen-deck-wrap { position: relative; padding-bottom: 42px; }
-.screen-deck {
-	position: relative;
-	display: block;
-	height: 445px;
-	perspective: 1200px;
-}
-.screen-deck .screen-card {
-	position: absolute;
-	inset: 0;
-	margin: 0;
-	transform-origin: 50% 100%;
-	transition: transform .72s cubic-bezier(.22, 1, .36, 1), opacity .45s ease, filter .45s ease;
-}
-.screen-deck .screen-card:nth-child(1) { z-index: 5; transform: translate(0, 0) rotate(0deg); }
-.screen-deck .screen-card:nth-child(2) { z-index: 4; transform: translate(16px, 14px) rotate(1.8deg) scale(.985); }
-.screen-deck .screen-card:nth-child(3) { z-index: 3; transform: translate(30px, 27px) rotate(-2.2deg) scale(.97); }
-.screen-deck .screen-card:nth-child(4) { z-index: 2; transform: translate(43px, 39px) rotate(2.8deg) scale(.955); }
-.screen-deck .screen-card:nth-child(n+5) { z-index: 1; opacity: 0; pointer-events: none; transform: translate(52px, 48px) rotate(-4deg) scale(.94); }
-.screen-deck .screen-card-active:hover { transform: translateY(-8px) rotate(-.4deg); }
-.screen-deck .screen-card { display: flex; flex-direction: column; overflow: hidden; pointer-events: none; background: #fff; }
-.screen-deck .screen-card-active { pointer-events: auto; }
-.screen-deck .screen-card img { flex: 1 1 auto; min-height: 0; width: 100%; height: auto; object-fit: contain; object-position: center; background: #f8fbff; }
-.screen-deck .screen-card figcaption { flex: 0 0 auto; background: #fff; }
-.screen-deck-controls { position: relative; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 14px; color: #8a9ab0; font: 11px 'DM Mono', monospace; }
-.screen-deck-controls button { border: 0; padding: 7px 0; background: none; color: #5285df; font: 600 12px inherit; cursor: pointer; }
-.screen-deck-controls button:hover { color: #2869d0; }
-
-@media(max-width:820px) {
-	.screen-deck { height: 390px; }
-	.screen-deck .screen-card img { height: 310px; }
-}
-@media(max-width:500px) {
-	.screen-deck { height: 310px; }
-	.screen-deck .screen-card img { height: 235px; }
-	.screen-deck .screen-card:nth-child(2) { transform: translate(10px, 10px) rotate(1.8deg) scale(.985); }
-	.screen-deck .screen-card:nth-child(3) { transform: translate(18px, 19px) rotate(-2.2deg) scale(.97); }
-	.screen-deck .screen-card:nth-child(4) { transform: translate(25px, 27px) rotate(2.8deg) scale(.955); }
+/* 窄屏文档中心：只修复布局溢出，不改变桌面端视觉 */
+@media (max-width: 820px) {
+	.site-shell.docs-mode .reader-body {
+		grid-template-columns: minmax(188px, 34vw) minmax(0, 1fr);
+	}
+	.site-shell.docs-mode .markdown-view,
+	.site-shell.docs-mode .markdown-view > div {
+		min-width: 0;
+	}
+	.site-shell.docs-mode .markdown-view img,
+	.site-shell.docs-mode .markdown-view video {
+		max-width: 100%;
+		height: auto;
+	}
+	.site-shell.docs-mode .markdown-view pre,
+	.site-shell.docs-mode .markdown-view .md-code-block,
+	.site-shell.docs-mode .markdown-view .md-table-wrap {
+		max-width: 100%;
+		overflow-x: auto;
+	}
 }
 
-/* 牌堆阴影与页码控件之间留出明确间距 */
-.screen-deck-wrap { padding-bottom: 62px; }
-.screen-deck-controls { margin-top: 38px; }
-.screen-deck .screen-card img,
+@media (max-width: 600px) {
+	html,
+	body {
+		min-width: 0;
+		overflow-x: hidden;
+	}
+	.site-shell.docs-mode .reader-head {
+		min-width: 0;
+	}
+	.site-shell.docs-mode .reader-head > div:first-child {
+		min-width: 0;
+	}
+	.site-shell.docs-mode .reader-head h2 {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.site-shell.docs-mode .reader-actions {
+		flex: none;
+	}
+	.site-shell.docs-mode .markdown-view .md-diagram-body {
+		min-width: 0;
+		max-width: 100%;
+		overflow-x: auto;
+		overflow-y: hidden;
+		-webkit-overflow-scrolling: touch;
+	}
+	.site-shell.docs-mode .markdown-view .md-diagram-body svg {
+		max-width: none;
+	}
+	.site-shell.docs-mode .markdown-view .md-html-preview-wrap {
+		max-width: 100%;
+		overflow: hidden;
+	}
+	.site-shell.docs-mode .markdown-view.message-md {
+		padding: 24px 16px 48px;
+		font-size: 14px;
+		line-height: 1.75;
+	}
+	.site-shell.docs-mode .markdown-view.message-md p,
+	.site-shell.docs-mode .markdown-view.message-md li {
+		font-size: 14px;
+		line-height: 1.75;
+	}
+	.site-shell.docs-mode .markdown-view.message-md h1 {
+		font-size: 24px;
+		line-height: 1.35;
+		margin-bottom: 22px;
+	}
+	.site-shell.docs-mode .markdown-view.message-md h2 {
+		font-size: 20px;
+		line-height: 1.45;
+		margin-top: 28px;
+	}
+	.site-shell.docs-mode .markdown-view.message-md h3 {
+		font-size: 17px;
+		line-height: 1.5;
+		margin-top: 22px;
+	}
+	.site-shell.docs-mode .markdown-view.message-md h4,
+	.site-shell.docs-mode .markdown-view.message-md h5,
+	.site-shell.docs-mode .markdown-view.message-md h6 {
+		font-size: 15px;
+	}
+}
+
+@media (max-width: 380px) {
+	.site-shell.docs-mode .markdown-view.message-md {
+		padding-left: 14px;
+		padding-right: 14px;
+		font-size: 13px;
+	}
+	.site-shell.docs-mode .markdown-view.message-md p,
+	.site-shell.docs-mode .markdown-view.message-md li {
+		font-size: 13px;
+	}
+	.site-shell.docs-mode .markdown-view.message-md h1 {
+		font-size: 22px;
+	}
+	.site-shell.docs-mode .markdown-view.message-md h2 {
+		font-size: 19px;
+	}
+}
+
+/* 文档正文安全边界：长表格/代码/图表不能把整页横向撑出视口 */
+.site-shell.docs-mode .reader-shell,
+.site-shell.docs-mode .reader-head,
+.site-shell.docs-mode .reader-body,
+.site-shell.docs-mode .markdown-view {
+	box-sizing: border-box;
+	max-width: 100%;
+	min-width: 0;
+}
+.site-shell.docs-mode .reader-body {
+	grid-template-columns: minmax(0, 270px) minmax(0, 1fr);
+}
+.site-shell.docs-mode .markdown-view {
+	overflow-x: hidden;
+}
+.site-shell.docs-mode .markdown-view > div {
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
+}
+.site-shell.docs-mode .markdown-view .md-table-wrap,
+.site-shell.docs-mode .markdown-view .md-code-block,
+.site-shell.docs-mode .markdown-view pre {
+	max-width: 100%;
+	min-width: 0;
+}
+
 .screen-card img {
 	border-radius: 0;
 	clip-path: none;
 	object-fit: contain;
 	object-position: center;
 }
-.screen-deck .screen-card { overflow: visible; }
-@media(max-width:500px) {
-	.screen-deck-wrap { padding-bottom: 48px; }
-	.screen-deck-controls { margin-top: 30px; }
+
+footer {
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 0;
+}
+
+.footer-meta {
+	gap: 8px;
+	align-self: flex-start;
+}
+
+.footer-brand span {
+	max-width: none;
+	white-space: nowrap;
+	font-size: inherit;
+}
+
+/* 顶栏统一行为：首页与文档中心、宽屏与窄屏都保持吸顶 */
+.topbar,
+.site-shell.docs-mode > .topbar {
+	position: fixed !important;
+	top: 0 !important;
+	left: 0;
+	right: 0;
+	width: 100%;
+	margin: 0;
+	z-index: 100;
+}
+.site-shell {
+	padding-top: 58px;
+}
+
+/* 窄屏最终安全边界：覆盖历史移动端规则中的零内边距 */
+@media (max-width: 600px) {
+	.site-shell.docs-mode .reader-head {
+		padding-left: 16px !important;
+		padding-right: 16px !important;
+	}
+	.site-shell.docs-mode .mobile-doc-toolbar {
+		padding-left: 16px !important;
+		padding-right: 16px !important;
+	}
+	.site-shell.docs-mode .markdown-view,
+	.site-shell.docs-mode .markdown-view.message-md {
+		padding-left: 16px !important;
+		padding-right: 16px !important;
+	}
 }
