@@ -16,6 +16,11 @@
 .site-shell.docs-mode .md-diagram-body{overflow:auto;cursor:zoom-in}.site-shell.docs-mode .md-diagram-body svg{cursor:zoom-in}
 .diagram-preview-overlay{position:fixed;inset:0;z-index:90;display:grid;place-items:center;padding:clamp(24px,5vw,72px);background:rgba(29,43,62,.72);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);overflow:auto}.diagram-preview-content{display:flex;align-items:center;justify-content:center;width:min(94vw,1500px);min-height:180px;padding:24px;border:1px solid rgba(255,255,255,.72);border-radius:16px;background:#f7faff;box-shadow:0 24px 70px rgba(15,31,55,.4);overflow:auto}.diagram-preview-content svg{display:block;width:100%;height:auto;max-width:none;max-height:calc(100vh - 120px);margin:0 auto;color:#405069}
 @media(max-width:500px){.topbar-actions{gap:6px}.language-toggle{padding:9px 10px}.topbar-actions .glass-button{padding:10px 11px}.topbar-actions .glass-button span{display:none}}
+
+/* Hero actions share the compact navigation treatment and wrap cleanly on narrow screens. */
+.hero-actions{flex-wrap:wrap;gap:12px 16px}
+.hero-actions .github-project-link,.hero-actions .docs-entry{display:inline-flex;align-items:center;gap:7px}
+.hero-actions .github-icon,.hero-actions .document-icon{width:15px;height:15px;flex:none}
 .repo-link{display:inline-flex;align-items:center;gap:6px}.github-icon{width:16px;height:16px;display:block;flex:none}
 .github-project-link{display:inline-flex;align-items:center;gap:7px}
 .site-shell.docs-mode{height:auto;min-height:100vh;overflow:visible}.site-shell.docs-mode>.topbar{display:flex}.site-shell.docs-mode>.reader-overlay{position:relative;inset:auto;z-index:1;min-height:calc(100vh - 104px);padding:28px 0 56px;background:transparent;backdrop-filter:none}.site-shell.docs-mode .reader-shell{width:min(1240px,92vw);height:calc(100vh - 128px);min-height:680px;max-width:none;margin:0 auto;border-radius:22px}.site-shell.docs-mode .reader-head{height:86px}.site-shell.docs-mode .markdown-view{padding:38px 48px}
