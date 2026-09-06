@@ -23,7 +23,8 @@
 .hero-actions .github-icon,.hero-actions .document-icon{width:15px;height:15px;flex:none}
 .hero-actions .github-project-link{background:#17191d;border-color:#17191d;color:#fff}
 .hero-actions .github-project-link:hover{background:#000;border-color:#000;color:#fff}
-.hero-actions > .glass-button{height:48px;padding-top:0;padding-bottom:0;line-height:1;display:inline-flex;align-items:center;justify-content:center}
+.hero-actions > .glass-button{height:48px;padding-top:0;padding-bottom:0;font-size:14px;font-weight:600;line-height:1;display:inline-flex;align-items:center;justify-content:center}
+.hero-actions > .glass-button span,.hero-actions > .glass-button b{font-size:inherit;font-weight:inherit;line-height:inherit}
 .repo-link{display:inline-flex;align-items:center;gap:6px}.github-icon{width:16px;height:16px;display:block;flex:none}
 .github-project-link{display:inline-flex;align-items:center;gap:7px}
 .site-shell.docs-mode{height:auto;min-height:100vh;overflow:visible}.site-shell.docs-mode>.topbar{display:flex}.site-shell.docs-mode>.reader-overlay{position:relative;inset:auto;z-index:1;min-height:calc(100vh - 104px);padding:28px 0 56px;background:transparent;backdrop-filter:none}.site-shell.docs-mode .reader-shell{width:min(1240px,92vw);height:calc(100vh - 128px);min-height:680px;max-width:none;margin:0 auto;border-radius:22px}.site-shell.docs-mode .reader-head{height:86px}.site-shell.docs-mode .markdown-view{padding:38px 48px}
