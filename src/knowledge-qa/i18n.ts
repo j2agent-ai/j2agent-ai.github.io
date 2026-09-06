@@ -31,7 +31,8 @@ const zh = {
     '如何开发一个 J2Agent Agent？',
     'J2Agent 如何接入 MCP 工具？',
     '后台任务如何支持断线恢复？',
-    '如何在前端集成 J2Agent？'
+    'J2Agent 是如何进行意图路由的？',
+    'J2Agent 是如何做到图表渲染的？'
   ],
   askCustomPlaceholder: '或输入自定义回答…',
   askSend: '提交回答',
